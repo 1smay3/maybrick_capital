@@ -1,5 +1,5 @@
 import requests
-from constants import FMP_API_KEY
+from _secrets import FMP_API_KEY
 
 URL = f'https://financialmodelingprep.com/api/v3/sp500_constituent?apikey={FMP_API_KEY}'
 

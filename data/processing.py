@@ -23,12 +23,8 @@ def process_data(folder, engine):
 
     # Run post-processing to get in format we use
     prices_data_handler.read_raw_data("prices")
-    prices_data_handler._build_adj_close_frame("prices")
+    prices_data_handler.build_processed_prices("prices")
 
-    # Total Returns
-
-    total_returns = pct_change(prices, 1)
-    ds.write_parquet(total_returns,"total_return")
 
 if __name__ == '__main__':
     process_data()

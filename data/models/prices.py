@@ -90,23 +90,19 @@ class PricesDataHandler:
         sorted_df = prices_df.sort(by="date")
 
         self.data_store.write_parquet(sorted_df, "processed", "prices")
+        # Also add to cache to pick up later as its 'always' going to be
+        self.data_cache["processed_prices"] = sorted_df
 
 
-    # def generate_total_returns(self, key):
-    #     """Generate total returns for the given key."""
-    #     if key not in self.data_cache:
-    #         raise ValueError(f"No data available for key: {key}")
-    #
-    #     # Retrieve cached data
-    #     df = self.data_cache[key]
-    #
-    #     field = "adjClose"  # Example field name; adjust as needed
-    #     prices_df = self.get_field(key, field)
-    #
-    #     # Sort to chronological
-    #
-    #     # Calculate total returns
-    #     total_returns = pct_change(prices_df, period=1)  # Calculate pct_change over 1 period
-    #     # Save total returns
-    #     self.data_store.write_parquet(total_returns, "total_return")
-    #     return total_returns
+    def _generate_total_returns(self):
+        processed_prices = self.data_cache["processed_prices"]
+        # Calculate total returns
+        total_returns = pct_change(processed_prices, lookback=1)  # Calculate pct_change over 1 period
+        # Save total returns
+        self.data_store.write_parquet(total_returns, "processed", "total_return")
+        # Also add to cache to pick up later
+        self.data_cache["total_return"] = total_returns
+
+    def build_processed_prices(self, key):
+        self._build_adj_close_frame(key)
+        self._generate_total_returns()

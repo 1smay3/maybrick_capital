@@ -141,6 +141,7 @@ class DataStore:
             raise ValueError("Unsupported engine. Use 'polars' or 'pandas'.")
 
     def read_all(self, sub_directory):
+        self.all_data = {}
         """Load and cache all data files from a specific subdirectory."""
         # Create a Path object for the subdirectory
         subdir_path = Path(self.folder_path) / sub_directory

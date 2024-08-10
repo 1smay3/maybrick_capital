@@ -5,7 +5,7 @@ from data.models.prices import PricesDataHandler
 from data.models.profile import ProfileDataHandler
 
 @click.command()
-@click.option('--no-refresh', is_flag=True, default=True, help='Skip data refresh and processing.')
+@click.option('--no-refresh', is_flag=True, default=False, help='Skip data refresh and processing.')
 @click.option('--fields', multiple=True, default=['adjClose', 'volume'], help='Fields to process (can specify multiple fields).')
 @click.option('--engine', default='polars', help='Engine to use for reading/writing data (polars or pandas).')
 @click.option('--folder', default='local_store', help='Folder where data files are stored.') # TODO: Needs fixing to work if I move the folders easier, using root from os

@@ -1,100 +1,112 @@
-import aiohttp
 import asyncio
+from data.utils import pct_change
 import polars as pl
+from collections import defaultdict
 from constants import FLOAT_FIELDS_PRICES
-import logging
-import time
-
-
-"""
-Note: This end point also includes volumes, its broadly all the primary data we need
-"""
-
-
-# Set up basic configuration for logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
 class PricesDataHandler:
-    def __init__(self, api_key, symbols, interval='1min', rate_limit=300, data_handler=None, max_retries=3):
-        self.api_key = api_key
-        self.symbols = symbols
+    def __init__(self, data_gatherer, data_store, interval):
+        self.data_gatherer = data_gatherer
+        self.data_store = data_store
         self.interval = interval
-        self.rate_limit = rate_limit
-        self.semaphore = asyncio.Semaphore(rate_limit)
-        self.data_handler = data_handler or DataHandler()
-        self.max_retries = max_retries
+        self.api_key = data_gatherer.api_key
+        self.endpoint_url = 'https://financialmodelingprep.com/api/v3/{interval}/{symbol}?from=1900-01-01&apikey={api_key}'
+        self.sub_directory = "prices"  # Define the subdirectory for storing price data
+        self.data_cache = defaultdict(pl.DataFrame)  # To store and access data by key
 
-    async def _fetch_stock_data(self, session, symbol):
-        url = f'https://financialmodelingprep.com/api/v3/{self.interval}/{symbol}?from=1900-01-01&apikey={self.api_key}'
-        attempt = 0
+    def build_url(self, symbol):
+        """Build the URL for fetching data."""
+        return self.endpoint_url.format(interval=self.interval, symbol=symbol, api_key=self.api_key)
 
-        while attempt < self.max_retries:
-            async with self.semaphore:
-                logging.info(f'Starting to fetch data for symbol: {symbol} (Attempt {attempt + 1})')
-                try:
-                    async with session.get(url, ssl=False) as response:
-                        if response.status == 200:
-                            data = await response.json()
+    def _process_data(self, data):
+        """Process raw data from API response."""
+        # Convert fields to float
+        for record in data.get('historical', []):
+            for field in FLOAT_FIELDS_PRICES:
+                record[field] = float(record.get(field, 0))
+        # Create and return Polars DataFrame
+        df = pl.DataFrame(data['historical'])
+        # Ensure correct date parsing
+        df = df.with_columns(pl.col('date').str.strptime(pl.Datetime))
+        return df
 
-                            # Convert fields to float
-                            for record in data['historical']:
-                                for field in FLOAT_FIELDS_PRICES:
-                                    record[field] = float(record.get(field, 0))
-
-                            # Create and return Polars DataFrame
-                            df = pl.DataFrame(data['historical'])
-                            # Ensure correct date parsing
-                            df = df.with_columns(pl.col('date').str.strptime(pl.Datetime))
-                            logging.info(f'Fetched data for symbol: {symbol}')
-                            return symbol, df
-
-                        elif response.status == 429:  # Rate limit exceeded
-                            wait_time = int(response.headers.get('Retry-After',
-                                                                 60))  # Get Retry-After header or default to 60 seconds
-                            logging.warning(
-                                f'Rate limit exceeded for symbol: {symbol}. Waiting for {wait_time} seconds.')
-                            await asyncio.sleep(wait_time)
-                        else:
-                            response.raise_for_status()
-
-                except aiohttp.ClientResponseError as e:
-                    logging.error(f'Client response error for symbol: {symbol}. Error: {e}')
-                except aiohttp.ClientError as e:
-                    logging.error(f'Client error for symbol: {symbol}. Error: {e}')
-
-                attempt += 1
-
-        # If we exhausted all attempts and still failed
-        logging.error(f'Failed to fetch data for symbol: {symbol} after {self.max_retries} attempts.')
-        return symbol, pl.DataFrame()  # Return an empty DataFrame on failure
-
-    async def _fetch_all_data(self):
-        async with aiohttp.ClientSession() as session:
-            tasks = [self._fetch_stock_data(session, symbol) for symbol in self.symbols]
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-
-            # Save each DataFrame to local storage
-            for result in results:
-                if isinstance(result, Exception):
-                    logging.error(f'Error occurred: {result}')
-                    continue
-
-                symbol, df = result
-
-                if df.height == 0:
-                    logging.error(f'No data for symbol: {symbol}. Skipping saving.')
-                    continue
-
-                if 'label' in df.columns:
-                    df = df.drop(['label'])
-                df = df.sort(by='date')
-
-                self.data_handler.write_parquet(df, f'{symbol}_data.parquet')
-                logging.info(f'Saved data for symbol: {symbol}')
+    async def gather_and_store_data(self):
+        """Fetch data for all symbols and store it."""
+        await self.data_gatherer._fetch_all_data(self.build_url, self._process_data, self.sub_directory)
 
     def update_data(self):
-        if asyncio.get_event_loop().is_running():
-            return asyncio.ensure_future(self._fetch_all_data())
-        else:
-            asyncio.run(self._fetch_all_data())
+        """Run the async gathering and storing process."""
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                raise RuntimeError("Cannot run 'update_data' while another event loop is running")
+            else:
+                loop.run_until_complete(self.gather_and_store_data())
+        except RuntimeError as e:
+            print(f"RuntimeError: {e}")
+            raise e
+
+    def read_raw_data(self, sub_directory):
+        """Load raw data from the data store and cache it."""
+        all_data = self.data_store.read_all(sub_directory)
+        # Cache data using sub_directory as key
+        self.data_cache[sub_directory] = all_data
+        return all_data
+
+    def _get_list_of_field_frames(self, key, field):
+        """Fetch and process data for a specific field using cached data."""
+        if key not in self.data_cache:
+            raise ValueError(f"No data available for key: {key}")
+
+        all_frames = self.data_cache[key]
+
+        dfs = []
+        for frame_name, frame_data in all_frames.items():
+            symbol = frame_name.split('_')[1]
+            data = frame_data[["date", field]].rename({field: symbol})
+            dfs.append(data)
+        return dfs
+
+
+    def get_field(self, key, field):
+        """Get a merged DataFrame of a specific field across all symbols."""
+        list_of_frames = self._get_list_of_field_frames(key, field)
+        if not list_of_frames:
+            return pl.DataFrame()  # Return an empty DataFrame if no frames available
+        merged_df = list_of_frames[0]
+        for df in list_of_frames[1:]:
+            merged_df = merged_df.join(df, on="date", how="outer", coalesce=True)
+        return merged_df
+
+    def _build_adj_close_frame(self, key):
+        if key not in self.data_cache:
+            raise ValueError(f"No data available for key: {key}")
+
+
+        field = "adjClose"  # Example field name; adjust as needed
+        prices_df = self.get_field(key, field)
+        # Sort by the 'date' column in ascending order
+        sorted_df = prices_df.sort(by="date")
+
+        self.data_store.write_parquet(sorted_df, "processed", "prices")
+
+
+    # def generate_total_returns(self, key):
+    #     """Generate total returns for the given key."""
+    #     if key not in self.data_cache:
+    #         raise ValueError(f"No data available for key: {key}")
+    #
+    #     # Retrieve cached data
+    #     df = self.data_cache[key]
+    #
+    #     field = "adjClose"  # Example field name; adjust as needed
+    #     prices_df = self.get_field(key, field)
+    #
+    #     # Sort to chronological
+    #
+    #     # Calculate total returns
+    #     total_returns = pct_change(prices_df, period=1)  # Calculate pct_change over 1 period
+    #     # Save total returns
+    #     self.data_store.write_parquet(total_returns, "total_return")
+    #     return total_returns

@@ -118,11 +118,12 @@ class DataStore:
             logging.error(f"Failed to read {filename}: {e}")
             return None
 
-    def write_parquet(self, df, sub_directory, filename):
+    def write_parquet(self, df, sub_directory, filename, log=True):
         filepath = self._get_full_path(sub_directory, filename)
         try:
             df.write_parquet(filepath)
-            logging.info(f"Successfully wrote data to {filepath}")
+            if log:
+                logging.info(f"Successfully wrote data to {filepath}")
         except Exception as e:
             logging.error(f"Failed to write {filename}: {e}")
 
@@ -154,7 +155,7 @@ class DataStore:
         extra_files = existing_files.difference(set(self.symbols))
 
         if missing_symbols:
-            print(f"Missing files for symbols: {missing_symbols}")
+            print(f"Missing files for {sub_directory}, symbols: {missing_symbols}")
         if extra_files:
             print(f"Extra files found: {extra_files}")
 

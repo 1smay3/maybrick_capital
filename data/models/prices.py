@@ -6,30 +6,42 @@ from constants import FLOAT_FIELDS_PRICES
 
 
 class PricesDataHandler:
-    def __init__(self, data_gatherer, data_store, interval):
+    def __init__(self, data_gatherer, data_store, interval, sub_directory):
         self.data_gatherer = data_gatherer
         self.data_store = data_store
         self.interval = interval
         self.api_key = data_gatherer.api_key
         self.endpoint_url = 'https://financialmodelingprep.com/api/v3/{interval}/{symbol}?from=1900-01-01&apikey={api_key}'
-        self.sub_directory = "prices"  # Define the subdirectory for storing price data
+        self.sub_directory = sub_directory  # Define the subdirectory for storing price data
         self.data_cache = defaultdict(pl.DataFrame)  # To store and access data by key
 
     def build_url(self, symbol):
         """Build the URL for fetching data."""
         return self.endpoint_url.format(interval=self.interval, symbol=symbol, api_key=self.api_key)
 
-    def _process_data(self, data):
-        """Process raw data from API response."""
-        # Convert fields to float
+    def __process_raw_prices(self, data):
         for record in data.get('historical', []):
             for field in FLOAT_FIELDS_PRICES:
                 record[field] = float(record.get(field, 0))
-        # Create and return Polars DataFrame
+            # Create and return Polars DataFrame
         df = pl.DataFrame(data['historical'])
         # Ensure correct date parsing
         df = df.with_columns(pl.col('date').str.strptime(pl.Datetime))
         return df
+
+    def _process_raw_mktcap(self, data):
+        df = pl.DataFrame(data)
+        df = df.with_columns(pl.col('date').str.strptime(pl.Datetime))
+        return df
+
+    def _process_data(self, data):
+        if self.sub_directory == "prices":
+            response = self.__process_raw_prices(data)
+        if self.sub_directory == "market_cap":
+            response = self._process_raw_mktcap(data)
+        return response
+
+
 
     async def gather_and_store_data(self):
         """Fetch data for all symbols and store it."""
@@ -106,3 +118,5 @@ class PricesDataHandler:
     def build_processed_prices(self, key):
         self._build_adj_close_frame(key)
         self._generate_total_returns()
+
+    # TODO: process market cap

@@ -93,8 +93,6 @@ class DataStore:
     def _get_full_path(self, sub_directory, filename):
         """Construct the full file path including subdirectory."""
         subdir_path = os.path.join(self.folder_path, sub_directory)
-        if not os.path.exists(subdir_path):
-            os.makedirs(subdir_path)
         return os.path.join(subdir_path, filename)
 
     def read_parquet(self, sub_directory, filename, engine=None):

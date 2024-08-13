@@ -2,6 +2,15 @@ import polars as pl
 from collections import defaultdict
 from tqdm import tqdm
 from datetime import datetime as dt
+
+data_field_map = {"revenuefromcontractwithcustomerexcludingassessedtax": "Revenue",
+                  "stockholdersequity": "ShareholdersEquity",
+                  "netcashprovidedbyusedinoperatingactivities": "OperatingCashFlow",
+                  "weightedaveragenumberofdilutedsharesolutstanding": "DilutedNOS"}
+
+TTM_FIELDS = ["revenuefromcontractwithcustomerexcludingassessedtax",
+              "netcashprovidedbyusedinoperatingactivities"]
+
 class FinancialDataProcessor:
     def __init__(self, data_store, periods=['annual', 'quarter']):
         self.data_store = data_store
@@ -72,10 +81,21 @@ class FinancialDataProcessor:
                 print(f"Symbol: {stock_symbol} failed, check if it is missing in the statements or filings data, both are required")
 
 
+
+
+    # Fields are mapped here
+    # https: // www.sec.gov / ix?doc = / Archives / edgar / data / 1018724 / 000101
+    # 872424000130 / amzn - 20240630.
+    # htm
+
+
     def _get_single_stock_field_daily(self, period, field):
         processed_financials = self.read_raw_data(
             f"financial_statements/pre_processed/{period}")
 
+
+
+        field = field.lower()
 
         field_data_store = []
         for stock, data in processed_financials.items():
@@ -89,9 +109,15 @@ class FinancialDataProcessor:
 
                 sorted_df = field_data.sort(by="closest_filing_date")
 
+                # Apply TTM if we need/want it
+                if field in TTM_FIELDS and period=="quarterly":
+                    sorted_df = sorted_df.with_columns(
+                    pl.col(field).rolling_sum(window_size=4, min_periods=4).alias(field)
+                )
+
+
                 start_date = field_data['closest_filing_date'].min()
                 end_date = dt.today().date()
-                date_range = pl.date_range(start=start_date, end=end_date, interval='1d')
 
                 df_daily = pl.DataFrame(pl.date_range(
                     sorted_df['closest_filing_date'].min(),
@@ -121,6 +147,15 @@ class FinancialDataProcessor:
 
         return merged_df
 
-    def _combine_single_stock_fields_daily(self):
-        return None
+    def process_fields_to_dictionary(self, period, fields, save_name):
+        processed_data = {}
+        for field in fields:
+            processed_data[field] = self._get_single_stock_field_daily(period, field)
+
+        for data_name, data_data in processed_data.items():
+            data_nice_name = data_field_map[data_name]
+            self.data_store.write_parquet(data_data, "processed", rf"financials/quarterly/{data_nice_name}.parquet")
+
+        return processed_data
+
 

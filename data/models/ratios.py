@@ -18,6 +18,7 @@ class AccountingRatioBuilder:
 
     def build_ratios(self):
 
+        btp = self.data_cache['processed/financials']['processed/financials/quarterly_ShareholdersEquity'] / self.data_cache['']['processed/financials/quarterly_ShareholdersEquity']
 
 
         # book_price

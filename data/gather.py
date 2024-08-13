@@ -19,7 +19,7 @@ def refresh_data(fields, engine, folder, no_refresh):
     data_gatherer = DataGatherer(api_key=FMP_API_KEY, symbols=data_store.symbols, rate_limit=275, data_handler=data_store, max_retries=3)
 
     prices_data_handler = PricesDataHandler(data_gatherer, data_store, interval="historical-price-full", sub_directory="prices")
-    market_cap_data_handler = PricesDataHandler(data_gatherer, data_store, interval="historical-market-capitalization", sub_directory="market_cap")
+    market_cap_data_handler = PricesDataHandler(data_gatherer, data_store, interval="historical-market-capitalization", sub_directory="marketcap")
 
     profiles_data_handler = ProfileDataHandler(data_gatherer, data_store)
     financial_statements_data_handler = FinancialStatementsDataHandler(data_gatherer, data_store, periods=['annual', 'quarter'])

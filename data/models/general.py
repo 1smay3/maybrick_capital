@@ -139,14 +139,19 @@ class DataStore:
         else:
             raise ValueError("Unsupported engine. Use 'polars' or 'pandas'.")
 
-    def read_all(self, sub_directory):
+    def read_all(self, sub_directory, parquet_suffix = True):
         self.all_data = {}
         """Load and cache all data files from a specific subdirectory."""
         # Create a Path object for the subdirectory
         subdir_path = Path(self.folder_path) / sub_directory
 
         # Get a set of existing file stems in the subdirectory
-        existing_files = set(filepath.stem for filepath in subdir_path.glob('*.parquet'))
+        if parquet_suffix:
+            existing_files = set(filepath.stem for filepath in subdir_path.glob('*.parquet'))
+        else:
+            existing_files = set(filepath for filepath in subdir_path.glob('*'))
+
+
 
         # Check for missing symbols
         missing_symbols = set(self.symbols).difference(existing_files)

@@ -6,7 +6,7 @@ from datetime import datetime as dt
 data_field_map = {"revenuefromcontractwithcustomerexcludingassessedtax": "Revenue",
                   "stockholdersequity": "ShareholdersEquity",
                   "netcashprovidedbyusedinoperatingactivities": "OperatingCashFlow",
-                  "weightedaveragenumberofdilutedsharesolutstanding": "DilutedNOS"}
+                  "weightedaveragenumberofdilutedsharesoutstanding": "DilutedNOS"}
 
 TTM_FIELDS = ["revenuefromcontractwithcustomerexcludingassessedtax",
               "netcashprovidedbyusedinoperatingactivities"]

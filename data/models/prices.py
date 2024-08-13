@@ -37,7 +37,7 @@ class PricesDataHandler:
     def _process_data(self, data):
         if self.sub_directory == "prices":
             response = self.__process_raw_prices(data)
-        if self.sub_directory == "market_cap":
+        if self.sub_directory == "marketcap":
             response = self._process_raw_mktcap(data)
         return response
 
@@ -120,3 +120,15 @@ class PricesDataHandler:
         self._generate_total_returns()
 
     # TODO: process market cap
+    def build_processed_market_caps(self, key):
+        if key not in self.data_cache:
+            raise ValueError(f"No data available for key: {key}")
+
+        field = "marketCap"  # Example field name; adjust as needed
+        market_cap_df = self.get_field(key, field)
+        # Sort by the 'date' column in ascending order
+        sorted_df = market_cap_df.sort(by="date")
+
+        self.data_store.write_parquet(sorted_df, "processed", "marketcap")
+        # Also add to cache to pick up later as its 'always' going to be
+        self.data_cache["processed_marketcap"] = sorted_df

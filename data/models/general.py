@@ -125,15 +125,21 @@ class DataStore:
         except Exception as e:
             logging.error(f"Failed to write {filename}: {e}")
 
-    def read(self, sub_directory, filename, engine=None):
+    def read(self, sub_directory, filename, engine=None, parquet_suffix=True):
         # Use the provided engine or fallback to the default one
         engine = engine or self.engine
 
+        clean_filename = f'{filename}.parquet' if parquet_suffix else filename
+
         # Construct the file path
-        filepath = self._get_full_path(sub_directory, f'{filename}.parquet')
+        filepath = self._get_full_path(sub_directory, f'{clean_filename}')
 
         if engine == "polars":
-            return pl.read_parquet(filepath)
+            if os.path.isdir(filepath):
+                print(filepath, "is a directory!")
+            else:
+                return pl.read_parquet(filepath)
+
         elif engine == "pandas":
             return pd.read_parquet(filepath, engine='pyarrow')
         else:
@@ -163,10 +169,11 @@ class DataStore:
             print(f"Extra files found: {extra_files}")
 
         # Iterate through each parquet file in the subdirectory
-        for filepath in subdir_path.glob('*.parquet'):
+        for filepath in existing_files:
+            # Construct the full path
             # Read parquet file and cache it
-            data = self.read(sub_directory, filepath.stem)
+            data = self.read(sub_directory, filepath, parquet_suffix=parquet_suffix)
             if data is not None:
-                self.all_data[f'{sub_directory}_{filepath.stem}'] = data
+                self.all_data[f'{sub_directory}_{filepath}'] = data
 
         return self.all_data

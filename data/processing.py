@@ -48,8 +48,7 @@ def process_data(folder, engine):
     # Load processed financial statemnts
     # processed_quarterlys = financial_statements_processor.process_fields_to_dictionary("quarter", ["revenuefromcontractwithcustomerexcludingassessedtax", "stockholdersequity", "netcashprovidedbyusedinoperatingactivities", "weightedaveragenumberofdilutedsharesoutstanding"], save_name="quarterly_financials")
     ratios = AccountingRatioBuilder(data_store)
-    ratios.read_raw_data("processed/financials", "quarterly") # TODO: fix saving and loading rather than patching loading funcs
-    ratios.read_raw_data("processed")
+    ratios.read_raw_data("processed", "processed/financials", "quarterly") # TODO: fix saving and loading rather than patching loading funcs
 
     ratios.build_ratios()
 

@@ -116,7 +116,8 @@ class FinancialDataProcessor:
 
         self.data_cache["market"] = renamed_data_cache
 
-    def read_raw_data(self, processed_dir, financials_dir, period, markets_dir):
+    def read_all_data_to_clean(self, processed_dir, financials_dir, period, markets_dir):
+        # TODO: rename funcs and remove rundendancy...
         financials_processed_data = os.path.join(processed_dir, financials_dir, period)
         market_processed_data = os.path.join(processed_dir,markets_dir)
         self.read_processed_financials(financials_processed_data)
@@ -149,15 +150,18 @@ class FinancialDataProcessor:
                     pl.col(field).rolling_sum(window_size=4, min_periods=4).alias(field)
                 )
 
-                df_daily = pl.DataFrame(pl.date_range(
-                    sorted_df['closest_filing_date'].min(),
-                    dt.today().date(),
-                    interval='1d',
-                    eager=True
-                ).alias('date')).join(
+                # TODO: get rid of this dependancy, build ourselves from prices?
+                business_days = pd.date_range(start= sorted_df['closest_filing_date'].min(), end=dt.today().date(), freq='B')
+
+                df_business_days = pl.DataFrame({
+                    'date': business_days
+                })
+                df_business_days = df_business_days.with_columns(pl.col('date').cast(pl.Date))
+
+                df_daily = df_business_days.join(
                     sorted_df,
                     left_on='date',
-                    right_on = "closest_filing_date",
+                    right_on='closest_filing_date',
                     how='left'
                 ).select([
                     pl.col('date'),

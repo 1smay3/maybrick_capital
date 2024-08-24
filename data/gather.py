@@ -22,15 +22,15 @@ def refresh_data(fields, engine, folder, no_refresh):
     market_cap_data_handler = PricesDataHandler(data_gatherer, data_store, interval="historical-market-capitalization", sub_directory="marketcap")
 
     profiles_data_handler = ProfileDataHandler(data_gatherer, data_store)
-    financial_statements_data_handler = FinancialStatementsDataHandler(data_gatherer, data_store, periods=['annual', 'quarter'])
+    financial_statements_data_handler = FinancialStatementsDataHandler(data_gatherer, data_store, periods=['annual', 'quarterly'])
 
 
     if not no_refresh:
         click.echo(f"Refreshing Data")
         # prices_data_handler.update_data()
         # profiles_data_handler.update_data()
-        # financial_statements_data_handler.update_data()
-        market_cap_data_handler.update_data()
+        financial_statements_data_handler.update_data()
+        # market_cap_data_handler.update_data()
 
 
 if __name__ == '__main__':

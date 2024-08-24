@@ -95,7 +95,7 @@ class DataStore:
         subdir_path = os.path.join(self.folder_path, sub_directory)
         return os.path.join(subdir_path, filename)
 
-    def read_parquet(self, sub_directory, filename, engine=None):
+    def read_parquet(self, sub_directory, filename, engine="polars"):
         engine = engine or self.engine
         filepath = self._get_full_path(sub_directory, filename)
 
@@ -145,7 +145,7 @@ class DataStore:
         else:
             raise ValueError("Unsupported engine. Use 'polars' or 'pandas'.")
 
-    def read_all(self, sub_directory, parquet_suffix = True):
+    def real_all_in_directory(self, sub_directory, parquet_suffix = True):
         self.all_data = {}
         """Load and cache all data files from a specific subdirectory."""
         # Create a Path object for the subdirectory
@@ -159,7 +159,7 @@ class DataStore:
 
 
 
-        # Check for missing symbols
+        # Check for missing symbols - TODO: This doesnt work, as we arent always expecting to load symbols
         missing_symbols = set(self.symbols).difference(existing_files)
         extra_files = existing_files.difference(set(self.symbols))
 
@@ -177,3 +177,10 @@ class DataStore:
                 self.all_data[f'{sub_directory}_{filepath}'] = data
 
         return self.all_data
+
+    def read_core_data(self):
+        core_data_dict = self.real_all_in_directory("core_data", parquet_suffix = True)
+        clean_core_data_dict = {}
+        for k, v in core_data_dict.items():
+            clean_core_data_dict[k.replace("core_data_", "")] = v
+        return clean_core_data_dict

@@ -61,7 +61,7 @@ class PricesDataHandler:
 
     def read_raw_data(self, sub_directory):
         """Load raw data from the data store and cache it."""
-        all_data = self.data_store.read_all(sub_directory)
+        all_data = self.data_store.real_all_in_directory(sub_directory)
         # Cache data using sub_directory as key
         self.data_cache[sub_directory] = all_data
         return all_data
@@ -88,8 +88,11 @@ class PricesDataHandler:
             return pl.DataFrame()  # Return an empty DataFrame if no frames available
         merged_df = list_of_frames[0]
         for df in list_of_frames[1:]:
-            merged_df = merged_df.join(df, on="date", how="outer", coalesce=True)
-        return merged_df
+            # if df.to_pandas().index.duplicated().any():
+            #     print(df.columns)
+            merged_df = merged_df.join(df, how="full", on="date", coalesce=True)
+        no_duplicates_df = merged_df.unique(keep="first", subset="date") # TODO: still unsure why we are introducing duplicates and what we are drop
+        return no_duplicates_df
 
     def _build_adj_close_frame(self, key):
         if key not in self.data_cache:
@@ -101,7 +104,7 @@ class PricesDataHandler:
         # Sort by the 'date' column in ascending order
         sorted_df = prices_df.sort(by="date")
 
-        self.data_store.write_parquet(sorted_df, "processed", "prices")
+        self.data_store.write_parquet(sorted_df, "processed/market_data", "prices.parquet")
         # Also add to cache to pick up later as its 'always' going to be
         self.data_cache["processed_prices"] = sorted_df
 
@@ -111,7 +114,7 @@ class PricesDataHandler:
         # Calculate total returns
         total_returns = pct_change(processed_prices, lookback=1)  # Calculate pct_change over 1 period
         # Save total returns
-        self.data_store.write_parquet(total_returns, "processed", "total_return")
+        self.data_store.write_parquet(total_returns,  "processed/market_data", "total_return.parquet")
         # Also add to cache to pick up later
         self.data_cache["total_return"] = total_returns
 
@@ -129,6 +132,6 @@ class PricesDataHandler:
         # Sort by the 'date' column in ascending order
         sorted_df = market_cap_df.sort(by="date")
 
-        self.data_store.write_parquet(sorted_df, "processed", "marketcap")
+        self.data_store.write_parquet(sorted_df, "processed/market_data", "marketcap.parquet")
         # Also add to cache to pick up later as its 'always' going to be
         self.data_cache["processed_marketcap"] = sorted_df

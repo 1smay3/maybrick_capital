@@ -43,12 +43,12 @@ class ProfileDataHandler:
 
     def read_raw_data(self, sub_directory):
         """Load raw data from the data store and cache it."""
-        all_data = self.data_store.read_all(sub_directory)
+        all_data = self.data_store.real_all_in_directory(sub_directory)
         # Cache data using sub_directory as key
         self.data_cache[sub_directory] = all_data
         return all_data
 
-    def combine_all_profiles(self):
+    def combine_and_save_all_profiles(self):
         # Choose a frame to use as base schema:
         schema = self.data_cache["profiles"]["profiles_MCD"].schema
 
@@ -57,7 +57,7 @@ class ProfileDataHandler:
 
         combined_frame = pl.concat(self.data_cache["profiles"].values())
 
-        self.data_store.write_parquet(combined_frame, "processed", "all_profiles")
+        self.data_store.write_parquet(combined_frame,  "processed/market_data", "all_profiles.parquet")
         # Also add to cache to pick up later
         self.data_cache["all_profiles"] = combined_frame
 

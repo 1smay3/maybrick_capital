@@ -64,7 +64,7 @@ class FinancialStatementsDataHandler:
     def read_raw_data(self, symbol, period):
         """Load raw data for a specific symbol and period from the data store and cache it."""
         sub_directory = f"{self.sub_directory}/{symbol}/{period}"
-        all_data = self.data_store.read_all(sub_directory)
+        all_data = self.data_store.real_all_in_directory(sub_directory)
         self.data_cache[sub_directory] = all_data
         return all_data
 

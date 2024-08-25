@@ -34,9 +34,10 @@ def process_data(folder, engine):
     # RATIOS ------------------------------------
     ratios = AccountingRatioBuilder(data_store)
     #
-    # # Run post-processing to get in format we wan
-    # prices_data_handler.read_raw_data("prices")
-    # prices_data_handler.build_processed_prices("prices")
+    # # Run post-processing to get in format we want
+    prices_data_handler.read_raw_data("prices")
+    prices_data_handler.build_processed_prices("prices")
+    prices_data_handler.build_base_frame()
     #
     # profiles_data_handler.read_raw_data("profiles")
     # profiles_data_handler.combine_and_save_all_profiles()
@@ -48,8 +49,8 @@ def process_data(folder, engine):
     # Note: Some stocks dont have data for financials, so we start to drop columns here
     if PRE_PROCESS_FINANCIAL_STATEMENTS:
         # For the US, no semi-annual reporting
-        financial_statements_processor.add_metadata_to_statements("annual")
-        financial_statements_processor.add_metadata_to_statements("quarterly")
+        # financial_statements_processor.add_metadata_to_statements("annual")
+        # financial_statements_processor.add_metadata_to_statements("quarterly")
         financial_statements_processor.build_single_field_frames("quarterly")
 
     # Load processed financial statements

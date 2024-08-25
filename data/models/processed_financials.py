@@ -221,12 +221,11 @@ class FinancialDataProcessor:
     def _reindex_dataframes_to_base(self, dataframes_dict, common_dates: pl.Series,
                                     common_columns: list[str]) -> list[pl.DataFrame]:
         # Parse to pandas first
-        blank_df = pd.DataFrame(columns = common_columns, index=common_dates)
+        base_frame = self.data_store.read_parquet("core_data", "base_frame.parquet").to_pandas().set_index("date")
         reindexed_frames = {}
         for dataframe_name, dataframe in dataframes_dict.items():
             pandas_df = dataframe.to_pandas().set_index("date")
-            reindexed_df = pl.from_pandas(pandas_df.reindex_like(blank_df).reset_index())
-            reindexed_df = reindexed_df.rename({"index": "date"})
+            reindexed_df = pl.from_pandas(pandas_df.reindex_like(base_frame).reset_index())
             reindexed_frames[dataframe_name] = reindexed_df
 
         return reindexed_frames
@@ -234,7 +233,7 @@ class FinancialDataProcessor:
 
 
     def standardise_data(self, processed_dir, financials_dir, period, markets_dir):
-        self.read_raw_data(processed_dir, financials_dir,period, markets_dir)
+        self.read_all_data_to_clean(processed_dir, financials_dir,period, markets_dir)
 
         if "financials" and "market" in self.data_cache.keys():
             # Build a list of all dfs

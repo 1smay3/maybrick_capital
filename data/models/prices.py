@@ -2,7 +2,7 @@ import asyncio
 from data.utils import pct_change
 import polars as pl
 from collections import defaultdict
-from constants import FLOAT_FIELDS_PRICES
+from constants import FLOAT_FIELDS_PRICES, DATA_START_DATE
 
 
 class PricesDataHandler:
@@ -122,7 +122,23 @@ class PricesDataHandler:
         self._build_adj_close_frame(key)
         self._generate_total_returns()
 
-    # TODO: process market cap
+    def build_base_frame(self, start_date = DATA_START_DATE):
+        # Builds a base dataframe that everything is reindexed by to keep everything the same shape
+        # Load total returns
+        total_returns = self.data_store.read_parquet("processed/market_data", "total_return.parquet")
+
+        total_returns_sliced = total_returns.filter(pl.col('date') >= start_date)
+
+
+        filtered_df = total_returns_sliced.filter(
+            pl.any_horizontal(pl.col(pl.Float32, pl.Float64).is_not_nan())
+        )
+
+        self.data_store.write_parquet(filtered_df,  "core_data", "base_frame.parquet")
+
+
+        return filtered_df
+
     def build_processed_market_caps(self, key):
         if key not in self.data_cache:
             raise ValueError(f"No data available for key: {key}")

@@ -1,5 +1,4 @@
-from toraniko.utils import top_n_by_group
-import click
+import numpy as np
 import polars as pl
 from data.models.general import DataGatherer, DataStore
 from _secrets import FMP_API_KEY
@@ -80,8 +79,64 @@ class TorikanoDataProcessor:
 
         return combined_df
 
-    def build_required_data(self):
+    def sanitise_data_types(self,
+            df: pl.DataFrame | pl.LazyFrame, features: tuple[str, ...], sort_col: str, over_col: str
+    ) -> pl.LazyFrame:
+        """Cast feature columns to numeric (float), convert NaN and inf values to null, then forward fill nulls
+        for each column of `features`, sorted on `sort_col` and partitioned by `over_col`.
+
+        Parameters
+        ----------
+        df: Polars DataFrame or LazyFrame containing columns `sort_col`, `over_col` and each of `features`
+        features: collection of strings indicating which columns of `df` are the feature values
+        sort_col: str column of `df` indicating how to sort
+        over_col: str column of `df` indicating how to partition
+
+        Returns
+        -------
+        Polars LazyFrame containing the original columns with cleaned feature data
+        """
+        try:
+            # eagerly check all `features`, `sort_col`, `over_col` present: can't catch ColumNotFoundError in lazy context
+            assert all(c in df.columns for c in features + (sort_col, over_col))
+            return (
+                df.lazy()
+                .with_columns([pl.col(f).cast(float).alias(f) for f in features])
+                .with_columns(
+                    [
+                        pl.when(
+                            (pl.col(f).abs() == np.inf)
+                            | (pl.col(f) == np.nan)
+                            | (pl.col(f).is_null())
+                            | (pl.col(f).cast(str) == "NaN")
+                        )
+                        .then(None)
+                        .otherwise(pl.col(f))
+                        .alias(f)
+                        for f in features
+                    ]
+                )
+                .sort(by=sort_col)
+            # Rather than ffill for returns, we use min_periods - alternative is to drop over days
+            # where there are no returns, given all the stocks are in the same country. Probably
+            # Just holidays?
+            # .with_columns([pl.col(f).forward_fill().over(over_col).alias(f) for f in features])
+
+            )
+        except AttributeError as e:
+            raise TypeError("`df` must be a Polars DataFrame | LazyFrame, but it's missing required attributes") from e
+        except AssertionError as e:
+            raise ValueError(f"`df` must have all of {[over_col, sort_col] + list(features)} as columns") from e
+
+
+    def build_required_data(self, start_date):
         returns = self.build_returns_df()
         ratios = self.build_ratio_dfs()
         all_data = self.combine_all_data(ratios["ptb"], ratios["stp"],ratios["cftp"],ratios["market_cap"], returns)
-        return all_data
+        filtered_df = all_data.filter(pl.col('date') >= start_date)
+        filtered_df = self.sanitise_data_types(filtered_df,
+                                              features=('book_price', 'sales_price', 'cf_price', 'market_cap', 'asset_returns'),
+                                              sort_col="date", over_col="symbol").collect()
+        return filtered_df
+
+

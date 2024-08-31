@@ -5,6 +5,7 @@ from _secrets import FMP_API_KEY
 from data.models.ratios import AccountingRatioBuilder
 from data.models.prices import PricesDataHandler
 from data.models.profile import ProfileDataHandler
+from data.models.market_cap import MarketCapDataHandler
 
 
 PRE_PROCESS_FINANCIAL_STATEMENTS = False
@@ -26,7 +27,7 @@ def process_data(folder, engine):
     # PRICES -------------------------------
     prices_data_handler = PricesDataHandler(data_gatherer, data_store, interval="historical-price-full", sub_directory="price")
     # MARKET CAP -------------------------------
-    market_cap_data_handler = PricesDataHandler(data_gatherer, data_store, interval="historical-market-capitalization", sub_directory="marketcap")
+    market_cap_data_handler = MarketCapDataHandler(data_gatherer, data_store, interval="historical-market-capitalization", sub_directory="marketcap")
     # PROFILES ----------------------------------
     profiles_data_handler = ProfileDataHandler(data_gatherer, data_store)
     # FINANCIAL STATEMENTS ----------------------
@@ -42,8 +43,8 @@ def process_data(folder, engine):
     # profiles_data_handler.read_raw_data("profiles")
     # profiles_data_handler.combine_and_save_all_profiles()
     #
-    # market_cap_data_handler.read_raw_data("marketcap")
-    # market_cap_data_handler.build_processed_market_caps("marketcap")
+    market_cap_data_handler.read_raw_data("marketcap")
+    market_cap_data_handler.build_processed_market_caps("marketcap")
 
     # KEY RATIOS ----------------------
     # Note: Some stocks dont have data for financials, so we start to drop columns here

@@ -79,8 +79,28 @@ class TorikanoDataProcessor:
 
         return combined_df
 
+    def fill_nan(self,df: pl.DataFrame | pl.LazyFrame, columns: tuple[str, ...], sort_col: str):
+        return (
+            df.lazy()
+            .with_columns([pl.col(f).cast(float).alias(f) for f in columns])
+            .with_columns(
+                [
+                    pl.when(
+                        (pl.col(f).abs() == np.inf)
+                        | (pl.col(f) == np.nan)
+                        | (pl.col(f).is_null())
+                        | (pl.col(f).cast(str) == "NaN")
+                    )
+                    .then(None)
+                    .otherwise(pl.col(f))
+                    .alias(f)
+                    for f in columns
+                ]
+            )
+            .sort(by=sort_col)).collect()
+
     def sanitise_data_types(self,
-            df: pl.DataFrame | pl.LazyFrame, features: tuple[str, ...], sort_col: str, over_col: str
+            df: pl.DataFrame | pl.LazyFrame, features: tuple[str, ...], sort_col: str, over_col: str, fill_cols: tuple[str, ...],
     ) -> pl.LazyFrame:
         """Cast feature columns to numeric (float), convert NaN and inf values to null, then forward fill nulls
         for each column of `features`, sorted on `sort_col` and partitioned by `over_col`.
@@ -120,8 +140,7 @@ class TorikanoDataProcessor:
             # Rather than ffill for returns, we use min_periods - alternative is to drop over days
             # where there are no returns, given all the stocks are in the same country. Probably
             # Just holidays?
-            # .with_columns([pl.col(f).forward_fill().over(over_col).alias(f) for f in features])
-
+            .with_columns([pl.col(f).forward_fill().over(over_col).alias(f) for f in fill_cols])
             )
         except AttributeError as e:
             raise TypeError("`df` must be a Polars DataFrame | LazyFrame, but it's missing required attributes") from e
@@ -136,7 +155,7 @@ class TorikanoDataProcessor:
         filtered_df = all_data.filter(pl.col('date') >= start_date)
         filtered_df = self.sanitise_data_types(filtered_df,
                                               features=('book_price', 'sales_price', 'cf_price', 'market_cap', 'asset_returns'),
-                                              sort_col="date", over_col="symbol").collect()
+                                              sort_col="date", over_col="symbol", fill_cols=('book_price', 'sales_price', 'cf_price', 'market_cap')).collect()
         return filtered_df
 
 

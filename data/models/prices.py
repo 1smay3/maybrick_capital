@@ -29,18 +29,9 @@ class PricesDataHandler:
         df = df.with_columns(pl.col('date').str.strptime(pl.Datetime))
         return df
 
-    def _process_raw_mktcap(self, data):
-        df = pl.DataFrame(data)
-        df = df.with_columns(pl.col('date').str.strptime(pl.Datetime))
-        return df
-
     def _process_data(self, data):
         if self.sub_directory == "prices":
             response = self.__process_raw_prices(data)
-        if self.sub_directory == "marketcap":
-            response = self._process_raw_mktcap(data)
-        return response
-
 
 
     async def gather_and_store_data(self):
@@ -88,8 +79,7 @@ class PricesDataHandler:
             return pl.DataFrame()  # Return an empty DataFrame if no frames available
         merged_df = list_of_frames[0]
         for df in list_of_frames[1:]:
-            # if df.to_pandas().index.duplicated().any():
-            #     print(df.columns)
+
             merged_df = merged_df.join(df, how="full", on="date", coalesce=True)
         no_duplicates_df = merged_df.unique(keep="first", subset="date") # TODO: still unsure why we are introducing duplicates and what we are drop
         return no_duplicates_df
@@ -138,16 +128,3 @@ class PricesDataHandler:
 
 
         return filtered_df
-
-    def build_processed_market_caps(self, key):
-        if key not in self.data_cache:
-            raise ValueError(f"No data available for key: {key}")
-
-        field = "marketCap"  # Example field name; adjust as needed
-        market_cap_df = self.get_field(key, field)
-        # Sort by the 'date' column in ascending order
-        sorted_df = market_cap_df.sort(by="date")
-
-        self.data_store.write_parquet(sorted_df, "processed/market_data", "marketcap.parquet")
-        # Also add to cache to pick up later as its 'always' going to be
-        self.data_cache["processed_marketcap"] = sorted_df

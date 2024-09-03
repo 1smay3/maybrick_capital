@@ -29,6 +29,9 @@ class MarketCapDataHandler:
 
         return date_chunks
 
+    def synchronously_backfill_market_caps(self):
+        raise NotImplementedError
+
     def build_url(self, symbol, start_date, end_date):
         """Build the URL for fetching data for a specific date range."""
         return self.endpoint_url.format(interval=self.interval, symbol=symbol, start_date=start_date, end_date=end_date, api_key=self.api_key)

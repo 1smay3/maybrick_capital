@@ -248,7 +248,7 @@ class FinancialDataProcessor:
 
             for data_name, data in financial_data_dict.items():
                 # Now just save into local store, to make loading ez
-                self.data_store.write_parquet(data, f"core_data", f"{data_name}.parquet", log=True)
+                self.data_store.write_parquet(data, "core_data", f"{data_name}.parquet", log=True)
     def post_process_financial_data(self):
         # Combine Two Types of Revenue into one due to weird GAAP namings
         revenue_1 = self.data_store.read_parquet("core_data", "Revenue_1.parquet")
@@ -269,7 +269,7 @@ class FinancialDataProcessor:
         )
 
 
-        self.data_store.write_parquet(combined_revenue, f"core_data", "revenue.parquet", log=True)
+        self.data_store.write_parquet(combined_revenue, "core_data", "revenue.parquet", log=True)
 
         return None
 

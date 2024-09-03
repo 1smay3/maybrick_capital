@@ -1,9 +1,5 @@
 import numpy as np
 import polars as pl
-from data.models.general import DataGatherer, DataStore
-from _secrets import FMP_API_KEY
-from data.models.prices import PricesDataHandler
-from data.models.profile import ProfileDataHandler
 from collections import defaultdict
 
 

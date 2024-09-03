@@ -1,9 +1,6 @@
 import asyncio
-import aiohttp
 import polars as pl
-import logging
 from collections import defaultdict
-from datetime import datetime
 
 
 class FinancialStatementsDataHandler:
@@ -29,9 +26,9 @@ class FinancialStatementsDataHandler:
     async def gather_and_store_data(self):
         """Fetch data for all symbols and store it."""
         # Fetch financial statements data
-        # for period in self.periods:
-        #     build_url = lambda symbol: self.build_financials_url(symbol, period)
-        #     await self.data_gatherer._fetch_all_data(build_url, self._process_financial_data, f"{self.sub_directory}/{period}")
+        for period in self.periods:
+            build_url = lambda symbol: self.build_financials_url(symbol, period)
+            await self.data_gatherer._fetch_all_data(build_url, self._process_financial_data, f"{self.sub_directory}/{period}")
 
         # Fetch SEC filings data
         for sec_type in ['10-K', '10-Q']:

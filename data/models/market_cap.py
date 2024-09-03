@@ -1,11 +1,11 @@
 import asyncio
-from data.utils import pct_change
 import polars as pl
 from collections import defaultdict
-from constants import FLOAT_FIELDS_PRICES, DATA_START_DATE
+from constants import DATA_START_DATE
 from datetime import datetime, timedelta
 
 class MarketCapDataHandler:
+    # TODO: make a synchronous version that backfills the library in chunks of 500
     def __init__(self, data_gatherer, data_store, interval, sub_directory, start_date=DATA_START_DATE):
         self.data_gatherer = data_gatherer
         self.data_store = data_store

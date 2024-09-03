@@ -1,7 +1,5 @@
 import polars as pl
 from collections import defaultdict
-import pandas as pd
-import os
 
 class AccountingRatioBuilder:
     def __init__(self, data_store, periods=['annual', 'quarterly']):
@@ -42,17 +40,17 @@ class AccountingRatioBuilder:
         # PRICE-TO-BOOK
         ptb = financial_data_dict['marketcap'].drop("date") / financial_data_dict['ShareholdersEquity'].drop("date")
         ptb = financial_data_dict['marketcap'].select("date").with_columns(ptb)
-        self.data_store.write_parquet(ptb, f"core_data", "ptb.parquet", log=True)
+        self.data_store.write_parquet(ptb, "core_data", "ptb.parquet", log=True)
 
         # SALES-TO-PRICE
         stp = financial_data_dict['revenue'].drop("date") / financial_data_dict['marketcap'].drop("date")
         stp = financial_data_dict['revenue'].select("date").with_columns(stp)
-        self.data_store.write_parquet(stp, f"core_data", "stp.parquet", log=True)
+        self.data_store.write_parquet(stp, "core_data", "stp.parquet", log=True)
 
         # CASH FLOW-TO_PRICE
         cftp = financial_data_dict['OperatingCashFlow'].drop("date") / financial_data_dict['marketcap'].drop("date")
         cftp = financial_data_dict['OperatingCashFlow'].select("date").with_columns(stp)
-        self.data_store.write_parquet(cftp, f"core_data", "cftp.parquet", log=True)
+        self.data_store.write_parquet(cftp, "core_data", "cftp.parquet", log=True)
 
 
         return None

@@ -27,9 +27,9 @@ def refresh_data(fields, engine, folder, no_refresh):
 
     if not no_refresh:
         click.echo(f"Refreshing Data")
-        # prices_data_handler.update_data()
-        # profiles_data_handler.update_data()
-        # financial_statements_data_handler.update_data()
+        prices_data_handler.update_data()
+        profiles_data_handler.update_data()
+        financial_statements_data_handler.update_data()
         market_cap_data_handler.update_data()
 
 

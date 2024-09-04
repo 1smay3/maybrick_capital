@@ -8,6 +8,7 @@ import logging
 import os
 from constants import ROOT_DIR
 from data.models.symbols import get_sp500_symbols
+from datetime import datetime as dt
 
 # Set up basic configuration for logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -18,7 +19,7 @@ class DataStore:
         self.engine: str = engine
         self.folder_path: str = os.path.join(ROOT_DIR, self.base_location)
         self.all_data: dict = {}
-        self.symbols: List[str] = get_sp500_symbols()  # Fetch symbols during initialization
+        self.symbols: List[str] = get_sp500_symbols() # Fetch symbols during initialization
 
         # Log the initiaization
         logging.info(f"Initialized DataStore with base folder: {self.folder_path}")
@@ -118,7 +119,7 @@ class DataStore:
 
 
 class DataGatherer:
-    def __init__(self, api_key: str, symbols: List[str], rate_limit: int, data_handler:DataStore, max_retries=3):
+    def __init__(self, api_key: str, symbols: List[str], rate_limit: int, data_handler, max_retries=3):
         self.api_key = api_key
         self.symbols = symbols
         self.rate_limit = rate_limit
@@ -126,7 +127,7 @@ class DataGatherer:
         self.data_handler = data_handler
         self.max_retries = max_retries
 
-    async def _fetch_data(self, session: aiohttp.ClientSession, symbol: str, url: str, process_response: Callable)->tuple[str, pl.DataFrame]:
+    async def _fetch_data(self, session: aiohttp.ClientSession, symbol: str, url: str, process_response: Callable) -> tuple[str, pl.DataFrame]:
         attempt = 0
         while attempt < self.max_retries:
             async with self.semaphore:
@@ -155,32 +156,56 @@ class DataGatherer:
         logging.error(f'Failed to fetch data for symbol: {symbol} after {self.max_retries} attempts.')
         return symbol, pl.DataFrame()  # Return an empty DataFrame on failure
 
-    async def _fetch_all_data(self, build_url: Callable, process_response: Callable, file_suffix: str):
+    async def _fetch_all_data(self, build_url: Callable, process_response: Callable, file_suffix: str, date_chunker: Optional[Callable] = False) -> Dict[str, List[pl.DataFrame]]:
         async with aiohttp.ClientSession() as session:
-            tasks = [self._fetch_data(session, symbol, build_url(symbol), process_response) for symbol in self.symbols]
-            results = await asyncio.gather(*tasks, return_exceptions=True)
+            if date_chunker:
+                for symbol in self.symbols:
+                    all_date_chunks = date_chunker(dt(1990, 1, 1))  # Adjust date as needed
+                    tasks = [
+                        self._fetch_data(session, symbol, build_url(symbol, date_chunk), process_response)
+                        for date_chunk in all_date_chunks
+                    ]
 
-            for result in results:
-                if isinstance(result, Exception):
-                    logging.error(f'Error occurred: {result}')
-                    continue
+                    chunk_results = await asyncio.gather(*tasks, return_exceptions=True)
 
-                symbol, df = result
+                    all_data = []
+                    for result in chunk_results:
+                        symbol, data = result
+                        all_data.append(data)
 
-                if df.height == 0:
-                    logging.error(f'No data for symbol: {symbol}. Skipping saving.')
-                    continue
+                    symbol, df = symbol, pl.concat(all_data)
 
-                self.data_handler.write_parquet(df, file_suffix, f"{symbol}.parquet")
-                logging.info(f'Saved data for symbol: {symbol}')
+                    # TODO: Can just have in outer loop
+                    if df.height == 0:
+                        logging.error(f'No data for symbol: {symbol}. Skipping saving.')
+                        continue
 
-    def update_data(self, build_url: Callable, process_response: Callable, file_suffix: str)->Optional[asyncio.Future]:
+                    self.data_handler.write_parquet(df, file_suffix, f"{symbol}.parquet")
+                    logging.info(f'Saved data for symbol: {symbol}')
+
+
+            else:
+                tasks = [self._fetch_data(session, symbol, build_url(symbol), process_response) for symbol in
+                         self.symbols]
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+
+                for result in results:
+                    if isinstance(result, Exception):
+                        logging.error(f'Error occurred: {result}')
+                        continue
+
+                    symbol, df = result
+
+                    if df.height == 0:
+                        logging.error(f'No data for symbol: {symbol}. Skipping saving.')
+                        continue
+
+                    self.data_handler.write_parquet(df, file_suffix, f"{symbol}.parquet")
+                    logging.info(f'Saved data for symbol: {symbol}')
+
+
+    def update_data(self, build_url: Callable, process_response: Callable, file_suffix: str, date_chunker: Optional[Callable] = None) -> Optional[asyncio.Future]:
         if asyncio.get_event_loop().is_running():
-            return asyncio.ensure_future(self._fetch_all_data(build_url, process_response, file_suffix))
+            return asyncio.ensure_future(self._fetch_all_data(build_url, process_response, file_suffix, date_chunker))
         else:
-            asyncio.run(self._fetch_all_data(build_url, process_response, file_suffix))
-
-
-
-
-
+            return asyncio.run(self._fetch_all_data(build_url, process_response, file_suffix, date_chunker))

@@ -5,6 +5,7 @@ from data.models.prices import PricesDataHandler
 from data.models.profile import ProfileDataHandler
 from data.models.financial_statemenets import FinancialStatementsDataHandler
 from data.models.market_cap import MarketCapDataHandler
+from datetime import datetime as dt
 
 @click.command()
 @click.option('--no-refresh', is_flag=False, default=False, help='Skip data refresh and processing.')
@@ -19,7 +20,7 @@ def refresh_data(fields, engine, folder, no_refresh):
     data_gatherer = DataGatherer(api_key=FMP_API_KEY, symbols=data_store.symbols, rate_limit=275, data_handler=data_store, max_retries=3)
 
     prices_data_handler = PricesDataHandler(data_gatherer, data_store, interval="historical-price-full", sub_directory="prices")
-    market_cap_data_handler = MarketCapDataHandler(data_gatherer, data_store, interval="historical-market-capitalization", sub_directory="marketcap_v2")
+    market_cap_data_handler = MarketCapDataHandler(data_gatherer, data_store, start_date=dt(1990,1, 1), interval="historical-market-capitalization", sub_directory="marketcap_v2")
 
     profiles_data_handler = ProfileDataHandler(data_gatherer, data_store)
     financial_statements_data_handler = FinancialStatementsDataHandler(data_gatherer, data_store, periods=['annual', 'quarterly'])
@@ -27,10 +28,10 @@ def refresh_data(fields, engine, folder, no_refresh):
 
     if not no_refresh:
         click.echo(f"Refreshing Data")
-        prices_data_handler.update_data()
-        profiles_data_handler.update_data()
-        financial_statements_data_handler.update_data()
-        market_cap_data_handler.update_data()
+        # prices_data_handler.update_data()
+        # profiles_data_handler.update_data()
+        # financial_statements_data_handler.update_data()
+        market_cap_data_handler.synchronously_backfill_market_caps()
 
 
 if __name__ == '__main__':

@@ -30,8 +30,7 @@ class PricesDataHandler:
         return df
 
     def _process_data(self, data):
-        if self.sub_directory == "prices":
-            response = self.__process_raw_prices(data)
+        return self.__process_raw_prices(data)
 
 
     async def gather_and_store_data(self):

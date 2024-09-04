@@ -1,19 +1,21 @@
 import asyncio
 import polars as pl
-from collections import defaultdict
-from constants import DATA_START_DATE
 from datetime import datetime, timedelta
+from collections import defaultdict
+import logging
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
 
 class MarketCapDataHandler:
-    # TODO: make a synchronous version that backfills the library in chunks of 500
-    def __init__(self, data_gatherer, data_store, interval, sub_directory, start_date=DATA_START_DATE):
+    def __init__(self, data_gatherer, data_store, interval, sub_directory, start_date):
         self.data_gatherer = data_gatherer
         self.data_store = data_store
         self.interval = interval
         self.api_key = data_gatherer.api_key
         self.endpoint_url = 'https://financialmodelingprep.com/api/v3/{interval}/{symbol}?from={start_date}&to={end_date}&apikey={api_key}'
-        self.sub_directory = sub_directory  # Define the subdirectory for storing market cap data
-        self.data_cache = defaultdict(pl.DataFrame)  # To store and access data by key
+        self.sub_directory = sub_directory
+        self.data_cache = defaultdict(pl.DataFrame)
         self.start_date = start_date
 
     def _shard_calls_into_date_chunks(self, start_date, chunk_size_days=450):
@@ -29,45 +31,49 @@ class MarketCapDataHandler:
 
         return date_chunks
 
-    def synchronously_backfill_market_caps(self):
-        raise NotImplementedError
-
-    def build_url(self, symbol, start_date, end_date):
+    def build_url(self, symbol, date_chunk):
         """Build the URL for fetching data for a specific date range."""
-        return self.endpoint_url.format(interval=self.interval, symbol=symbol, start_date=start_date, end_date=end_date, api_key=self.api_key)
+        return self.endpoint_url.format(interval=self.interval, symbol=symbol, start_date=date_chunk[0],
+                                        end_date=date_chunk[1], api_key=self.api_key)
+
+    def _process_data(self, data):
+        return self.__process_raw_marketcap(data)
+
+    def __process_raw_marketcap(self, data):
+        if len(data)>1:
+            df = pl.DataFrame(data)
+            df = df.select(
+                pl.col("marketCap").cast(pl.Float64).alias("marketCap")
+            )
+        else:
+            df = pl.DataFrame()
+
+        return df
+
+
 
     async def gather_and_store_data(self):
         """Fetch data for all symbols and store it."""
-        date_chunks = self._shard_calls_into_date_chunks(self.start_date)
+        results = await self.data_gatherer._fetch_all_data(
+            build_url=self.build_url,
+            process_response=self._process_data,
+            file_suffix=self.sub_directory,
+            date_chunker=lambda symbol: self._shard_calls_into_date_chunks(self.start_date)
+        )
 
 
-        for start_date, end_date in date_chunks:
-            build_url = lambda symbol: self.build_url(symbol, start_date, end_date)
-            await self.data_gatherer._fetch_all_data(build_url, self._process_data, f"{self.sub_directory}")
-
-
-    def __process_raw_marketcap(self, data):
-        df = pl.DataFrame(data)
-        df = df.with_columns(pl.col('date').str.strptime(pl.Datetime))
-        return df
-
-    def _process_data(self, data):
-        response = self.__process_raw_marketcap(data)
-        return response
-
-    def _save_data(self, symbol, data_frame):
-        """Save the concatenated DataFrame for a symbol."""
-        file_name = f"{symbol}_marketcap.parquet"
-        self.data_store.write_parquet(data_frame, "processed/market_data", file_name)
-
-    def update_data(self):
+    def synchronously_backfill_market_caps(self):
         """Run the async gathering and storing process."""
+        # TODO: Ideally, and the initial idea, was that this would only refresh the last c.500 (due to api limit) rows
+        # rather than refresh the whole history but for now, we put this in the backlog as it doesn't advance the process
+        # rather its just fast
         try:
             loop = asyncio.get_event_loop()
             if loop.is_running():
                 raise RuntimeError("Cannot run 'update_data' while another event loop is running")
             else:
-                loop.run_until_complete(self.gather_and_store_data())
+                combined_results = loop.run_until_complete(self.gather_and_store_data())
+                return combined_results
         except RuntimeError as e:
             print(f"RuntimeError: {e}")
             raise e
@@ -75,7 +81,6 @@ class MarketCapDataHandler:
     def read_raw_data(self, sub_directory):
         """Load raw data from the data store and cache it."""
         all_data = self.data_store.read_all_in_directory(sub_directory)
-        # Cache data using sub_directory as key
         self.data_cache[sub_directory] = all_data
         return all_data
 
@@ -110,9 +115,6 @@ class MarketCapDataHandler:
 
         field = "marketCap"  # Example field name; adjust as needed
         market_cap_df = self.get_field(key, field)
-        # Sort by the 'date' column in ascending order
         sorted_df = market_cap_df.sort(by="date")
-
         self.data_store.write_parquet(sorted_df, "processed/market_data", "marketcap.parquet")
-        # Also add to cache to pick up later as it's 'always' going to be
         self.data_cache["processed_marketcap"] = sorted_df

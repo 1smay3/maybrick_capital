@@ -149,8 +149,6 @@ class FinancialDataProcessor:
             )  # TODO: Handle better/ actually handle...
 
             if field in quarterly_data_only.columns:
-                # E.g TODO: AIG doesnt have that field, 1. why not, 2. lets replace
-
                 field_data = quarterly_data_only.select(["closest_filing_date", field])
 
                 sorted_df = field_data.sort(by="closest_filing_date")
@@ -163,7 +161,7 @@ class FinancialDataProcessor:
                         .alias(field)
                     )
 
-                # TODO: get rid of this dependancy, build ourselves from prices?
+                # TODO: get rid of this dependancy, build ourselves from prices
                 business_days = pd.date_range(
                     start=sorted_df["closest_filing_date"].min(),
                     end=dt.today().date(),
@@ -207,7 +205,8 @@ class FinancialDataProcessor:
 
         no_duplicates_df = merged_df.unique(
             keep="first", subset="date"
-        )  # TODO: still havent put the time to look at why we are introducing duplicates, given the result checks out
+        )  # TODO: [MAYCAP-8] This isn't causing any issues as the data checks out,
+        # but valuable to know why and how the duplicates are being introduced
 
         return no_duplicates_df.sort(by="date")
 

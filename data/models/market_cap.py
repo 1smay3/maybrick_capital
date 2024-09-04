@@ -80,9 +80,9 @@ class MarketCapDataHandler:
 
     def synchronously_backfill_market_caps(self):
         """Run the async gathering and storing process."""
-        # TODO: Ideally, and the initial idea, was that this would only refresh the last c.500 (due to api limit) rows
-        # rather than refresh the whole history but for now, we put this in the backlog as it doesn't advance the process
-        # rather its just fast
+        # Note: Ideally, and the initial idea, was that this would only refresh the last c.500 (due to api limit)
+        # rows rather than refresh the whole history but for now, we put this in the backlog as it doesn't advance
+        # the process rather it's just fast
         try:
             loop = asyncio.get_event_loop()
             if loop.is_running():

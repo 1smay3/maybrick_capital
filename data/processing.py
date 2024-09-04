@@ -13,7 +13,7 @@ PRE_PROCESS_FINANCIAL_STATEMENTS = False
 
 
 @click.command()
-@click.option('--folder', default='local_store', help='Folder where data files are stored.') # TODO: Needs fixing to work if I move the folders easier, using root from os
+@click.option('--folder', default='local_store', help='Folder where data files are stored.')
 @click.option('--engine', default='polars', help='Engine to use for reading/writing data (polars or pandas).')
 def process_data(folder, engine):
     """Process data for a specific field and merge all symbol data."""

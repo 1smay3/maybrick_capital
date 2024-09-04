@@ -81,13 +81,14 @@ class PricesDataHandler:
         """Get a merged DataFrame of a specific field across all symbols."""
         list_of_frames = self._get_list_of_field_frames(key, field)
         if not list_of_frames:
-            return pl.DataFrame()  # Return an empty DataFrame if no frames available
+            return pl.DataFrame()
         merged_df = list_of_frames[0]
         for df in list_of_frames[1:]:
             merged_df = merged_df.join(df, how="full", on="date", coalesce=True)
         no_duplicates_df = merged_df.unique(
             keep="first", subset="date"
-        )  # TODO: still unsure why we are introducing duplicates and what we are drop
+        ) # TODO: [MAYCAP-8] This isn't causing any issues as the data checks out,
+        # but valuable to know why and how the duplicates are being introduced
         return no_duplicates_df
 
     def _build_adj_close_frame(self, key):

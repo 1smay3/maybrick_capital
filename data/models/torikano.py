@@ -3,7 +3,6 @@ import polars as pl
 from collections import defaultdict
 
 
-
 class TorikanoDataProcessor:
     def __init__(self, data_store):
         self.data_store = data_store
@@ -19,22 +18,20 @@ class TorikanoDataProcessor:
         # unique_sectors = all_profiles.select(pl.col("sector").unique()).to_series().to_list()
         # unique_symbols  = all_profiles.select(pl.col("symbol").unique()).to_series().to_list()
 
-        all_profiles_no_null = all_profiles.drop_nulls(subset=['sector', 'symbol'])
+        all_profiles_no_null = all_profiles.drop_nulls(subset=["sector", "symbol"])
         all_profiles_no_null = all_profiles_no_null.with_columns(
-            pl.lit(1).alias('indicator')
+            pl.lit(1).alias("indicator")
         )
-
 
         binary_df = all_profiles_no_null.pivot(
-            index='symbol',  # Rows are indexed by 'stock'
-            columns='sector',  # Columns are created based on unique values in 'sector'
-            values ='indicator'
+            index="symbol",  # Rows are indexed by 'stock'
+            columns="sector",  # Columns are created based on unique values in 'sector'
+            values="indicator",
         )
 
-        binary_df =  binary_df.fill_null(0)
+        binary_df = binary_df.fill_null(0)
         self.sectors = binary_df
         return binary_df
-
 
     def build_returns_df(self):
         returns = self.data_store.read_parquet("core_data", "total_return.parquet")
@@ -45,9 +42,10 @@ class TorikanoDataProcessor:
 
     def melt_data_and_rename(self, dataframe, value_column_name):
         metled_frame = dataframe.melt(id_vars="date")
-        metled_frame = metled_frame.rename({"variable":"symbol", "value":value_column_name})
+        metled_frame = metled_frame.rename(
+            {"variable": "symbol", "value": value_column_name}
+        )
         return metled_frame
-
 
     def build_ratio_dfs(self):
         ptb = self.data_store.read_parquet("core_data", "ptb.parquet")
@@ -63,19 +61,21 @@ class TorikanoDataProcessor:
             "ptb": ptb_melt,
             "stp": stp_melt,
             "cftp": cftp_melt,
-            "market_cap": mkt_cap_melt
+            "market_cap": mkt_cap_melt,
         }
 
     def combine_all_data(self, ptb, stp, cfp, mkt_cap, asset_returns):
         # Join all DataFrames on 'date' and 'symbol'
-        combined_df = ptb.join(stp, on=['date', 'symbol'], how='left')
-        combined_df = combined_df.join(cfp, on=['date', 'symbol'], how='left')
-        combined_df = combined_df.join(mkt_cap, on=['date', 'symbol'], how='left')
-        combined_df = combined_df.join(asset_returns, on=['date', 'symbol'], how='left')
+        combined_df = ptb.join(stp, on=["date", "symbol"], how="left")
+        combined_df = combined_df.join(cfp, on=["date", "symbol"], how="left")
+        combined_df = combined_df.join(mkt_cap, on=["date", "symbol"], how="left")
+        combined_df = combined_df.join(asset_returns, on=["date", "symbol"], how="left")
 
         return combined_df
 
-    def fill_nan(self,df: pl.DataFrame | pl.LazyFrame, columns: tuple[str, ...], sort_col: str):
+    def fill_nan(
+        self, df: pl.DataFrame | pl.LazyFrame, columns: tuple[str, ...], sort_col: str
+    ):
         return (
             df.lazy()
             .with_columns([pl.col(f).cast(float).alias(f) for f in columns])
@@ -93,10 +93,16 @@ class TorikanoDataProcessor:
                     for f in columns
                 ]
             )
-            .sort(by=sort_col)).collect()
+            .sort(by=sort_col)
+        ).collect()
 
-    def sanitise_data_types(self,
-            df: pl.DataFrame | pl.LazyFrame, features: tuple[str, ...], sort_col: str, over_col: str, fill_cols: tuple[str, ...],
+    def sanitise_data_types(
+        self,
+        df: pl.DataFrame | pl.LazyFrame,
+        features: tuple[str, ...],
+        sort_col: str,
+        over_col: str,
+        fill_cols: tuple[str, ...],
     ) -> pl.LazyFrame:
         """Cast feature columns to numeric (float), convert NaN and inf values to null, then forward fill nulls
         for each column of `features`, sorted on `sort_col` and partitioned by `over_col`.
@@ -133,25 +139,43 @@ class TorikanoDataProcessor:
                     ]
                 )
                 .sort(by=sort_col)
-            # Rather than ffill for returns, we use min_periods - alternative is to drop over days
-            # where there are no returns, given all the stocks are in the same country. Probably
-            # Just holidays?
-            .with_columns([pl.col(f).forward_fill().over(over_col).alias(f) for f in fill_cols])
+                # Rather than ffill for returns, we use min_periods - alternative is to drop over days
+                # where there are no returns, given all the stocks are in the same country. Probably
+                # Just holidays?
+                .with_columns(
+                    [
+                        pl.col(f).forward_fill().over(over_col).alias(f)
+                        for f in fill_cols
+                    ]
+                )
             )
         except AttributeError as e:
-            raise TypeError("`df` must be a Polars DataFrame | LazyFrame, but it's missing required attributes") from e
+            raise TypeError(
+                "`df` must be a Polars DataFrame | LazyFrame, but it's missing required attributes"
+            ) from e
         except AssertionError as e:
-            raise ValueError(f"`df` must have all of {[over_col, sort_col] + list(features)} as columns") from e
-
+            raise ValueError(
+                f"`df` must have all of {[over_col, sort_col] + list(features)} as columns"
+            ) from e
 
     def build_required_data(self, start_date):
         returns = self.build_returns_df()
         ratios = self.build_ratio_dfs()
-        all_data = self.combine_all_data(ratios["ptb"], ratios["stp"],ratios["cftp"],ratios["market_cap"], returns)
-        filtered_df = all_data.filter(pl.col('date') >= start_date)
-        filtered_df = self.sanitise_data_types(filtered_df,
-                                              features=('book_price', 'sales_price', 'cf_price', 'market_cap', 'asset_returns'),
-                                              sort_col="date", over_col="symbol", fill_cols=('book_price', 'sales_price', 'cf_price', 'market_cap')).collect()
+        all_data = self.combine_all_data(
+            ratios["ptb"], ratios["stp"], ratios["cftp"], ratios["market_cap"], returns
+        )
+        filtered_df = all_data.filter(pl.col("date") >= start_date)
+        filtered_df = self.sanitise_data_types(
+            filtered_df,
+            features=(
+                "book_price",
+                "sales_price",
+                "cf_price",
+                "market_cap",
+                "asset_returns",
+            ),
+            sort_col="date",
+            over_col="symbol",
+            fill_cols=("book_price", "sales_price", "cf_price", "market_cap"),
+        ).collect()
         return filtered_df
-
-

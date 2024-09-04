@@ -9,32 +9,47 @@ class FinancialStatementsDataHandler:
         self.data_store = data_store
         self.periods = periods
         self.api_key = data_gatherer.api_key
-        self.base_financials_url = 'https://financialmodelingprep.com/api/v3/financial-statement-full-as-reported/{symbol}?period={period}&apikey={api_key}'
-        self.base_sec_url = 'https://financialmodelingprep.com/api/v3/sec_filings/{symbol}?type={type}&page=0&apikey={api_key}'
+        self.base_financials_url = "https://financialmodelingprep.com/api/v3/financial-statement-full-as-reported/{symbol}?period={period}&apikey={api_key}"
+        self.base_sec_url = "https://financialmodelingprep.com/api/v3/sec_filings/{symbol}?type={type}&page=0&apikey={api_key}"
         self.sub_directory = "financial_statements"
         self.data_cache = defaultdict(pl.DataFrame)  # To store and access data by key
         self.sec_data_cache = defaultdict(dict)  # Cache for SEC filings
 
     def build_financials_url(self, symbol, period):
         """Build the URL for fetching financial statements data."""
-        return self.base_financials_url.format(symbol=symbol, period=period, api_key=self.api_key)
+        return self.base_financials_url.format(
+            symbol=symbol, period=period, api_key=self.api_key
+        )
 
-    def build_sec_url(self, symbol, type):
+    def build_sec_url(self, symbol, sec_type):
         """Build the URL for fetching SEC filings data."""
-        return self.base_sec_url.format(symbol=symbol, type=type, api_key=self.api_key)
+        return self.base_sec_url.format(
+            symbol=symbol, type=sec_type, api_key=self.api_key
+        )
+
+    def build_url(self, symbol, period):
+        """Build the URL for fetching financial data for a specific symbol and period."""
+        return self.build_financials_url(symbol, period)
 
     async def gather_and_store_data(self):
         """Fetch data for all symbols and store it."""
         # Fetch financial statements data
         for period in self.periods:
-            build_url = lambda symbol: self.build_financials_url(symbol, period)
-            await self.data_gatherer._fetch_all_data(build_url, self._process_financial_data, f"{self.sub_directory}/{period}")
+            # Use the build_url method instead of a lambda
+            await self.data_gatherer._fetch_all_data(
+                lambda symbol: self.build_financials_url(symbol, period),
+                self._process_financial_data,
+                f"{self.sub_directory}/{period}",
+            )
 
         # Fetch SEC filings data
-        for sec_type in ['10-K', '10-Q']:
-            build_url = lambda symbol: self.build_sec_url(symbol, sec_type)
-            await self.data_gatherer._fetch_all_data(build_url, self._process_sec_data,
-                                       f"{self.sub_directory}/SEC/{sec_type}")
+        for sec_type in ["10-K", "10-Q"]:
+            for sec_type in ["10-K", "10-Q"]:
+                await self.data_gatherer._fetch_all_data(
+                    lambda symbol: self.build_sec_url(symbol, sec_type),
+                    self._process_sec_data,
+                    f"{self.sub_directory}/SEC/{sec_type}",
+                )
 
     def _process_financial_data(self, data):
         """Process the financial data into a DataFrame."""
@@ -51,7 +66,9 @@ class FinancialStatementsDataHandler:
         try:
             loop = asyncio.get_event_loop()
             if loop.is_running():
-                raise RuntimeError("Cannot run 'update_data' while another event loop is running")
+                raise RuntimeError(
+                    "Cannot run 'update_data' while another event loop is running"
+                )
             else:
                 loop.run_until_complete(self.gather_and_store_data())
         except RuntimeError as e:
@@ -74,7 +91,7 @@ class FinancialStatementsDataHandler:
         dfs = []
 
         for frame_name, frame_data in all_frames.items():
-            symbol = frame_name.split('/')[2]
+            symbol = frame_name.split("/")[2]
             data = frame_data[["date", field]].rename({field: symbol})
             dfs.append(data)
 

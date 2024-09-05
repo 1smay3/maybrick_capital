@@ -12,7 +12,7 @@ class TorikanoDataProcessor:
 
     def build_sector_binary_frame(self):
         # Load processed profiles
-        all_profiles = self.data_store.read_parquet("processed", "all_profiles.parquet")
+        all_profiles = self.data_store.read_parquet("processed/market_data", "all_profiles.parquet")
 
         # # Get unique sectors
         # unique_sectors = all_profiles.select(pl.col("sector").unique()).to_series().to_list()

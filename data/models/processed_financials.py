@@ -20,7 +20,7 @@ TTM_FIELDS = [
 
 
 class FinancialDataProcessor:
-    def __init__(self, data_store, periods=["annual", "quarterly"]):
+    def __init__(self, data_store, periods=["annual", "quarter"]):
         self.data_store = data_store
         self.periods = periods
         self.sub_directory = "financial_statements"
@@ -116,7 +116,8 @@ class FinancialDataProcessor:
         DO_NOT_LOAD = ["all_profiles"]
         renamed_data_cache = {}
         for data_name, data in all_data.items():
-            clean_name = data_name.split("\\")[-1].split(".")[0]
+            clean_name = data_name.split("/")[-1].split(".")[0] # MAC
+            # clean_name = data_name.split("\\")[-1].split(".")[0] # Windows
             if clean_name in DO_NOT_LOAD:
                 pass
             else:
@@ -127,7 +128,7 @@ class FinancialDataProcessor:
     def read_all_data_to_clean(
         self, processed_dir, financials_dir, period, markets_dir
     ):
-        # TODO: rename funcs and remove rundendancy...
+        # TODO: rename funcs and remove redundaancy...
         financials_processed_data = os.path.join(processed_dir, financials_dir, period)
         market_processed_data = os.path.join(processed_dir, markets_dir)
         self.read_processed_financials(financials_processed_data)
@@ -154,7 +155,7 @@ class FinancialDataProcessor:
                 sorted_df = field_data.sort(by="closest_filing_date")
 
                 # Apply TTM if we need/want it
-                if field in TTM_FIELDS and period == "quarterly":
+                if field in TTM_FIELDS and period == "quarter":
                     sorted_df = sorted_df.with_columns(
                         pl.col(field)
                         .rolling_sum(window_size=4, min_periods=4)
@@ -193,7 +194,8 @@ class FinancialDataProcessor:
         for df in field_data_store[1:]:
             merged_df = merged_df.join(df, on="date", how="outer", coalesce=True)
 
-        # DILUTED NOS:#                      A          AAL  ...        ZBRA          ZTS
+        # DILUTED NOS:
+        #                       A          AAL  ...        ZBRA          ZTS
         # date                                  ...
         # 2015-02-27  338000000.0  737100000.0  ...  51251000.0  501610000.0
         # 2023-07-26  297000000.0  718890000.0  ...  51748069.0  464600000.0

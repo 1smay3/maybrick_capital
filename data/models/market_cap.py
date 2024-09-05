@@ -61,7 +61,8 @@ class MarketCapDataHandler:
         # TODO: Improve, quite unsafe
         if len(data) > 1:
             df = pl.DataFrame(data)
-            df = df.select(pl.col("marketCap").cast(pl.Float64).alias("marketCap"))
+            df = df.select(pl.col("marketCap").cast(pl.Float64).alias("marketCap"),
+                           pl.col("date"))
         else:
             df = pl.DataFrame()
 
@@ -98,7 +99,7 @@ class MarketCapDataHandler:
 
     def read_raw_data(self, sub_directory: str) -> dict:
         """Load raw data from the data store and cache it."""
-        all_data = self.data_store.read_all_in_directory(sub_directory)
+        all_data = self.data_store.real_all_in_directory(sub_directory)
         self.data_cache[sub_directory] = all_data
         return all_data
 
@@ -111,7 +112,7 @@ class MarketCapDataHandler:
 
         dfs = []
         for frame_name, frame_data in all_frames.items():
-            symbol = frame_name.split("_")[1]
+            symbol = frame_name.split("_")[-1]
             data = frame_data[["date", field]].rename({field: symbol})
             dfs.append(data)
         return dfs
@@ -133,7 +134,11 @@ class MarketCapDataHandler:
 
         field = "marketCap"  # Example field name; adjust as needed
         market_cap_df = self.get_field(key, field)
+
+        market_cap_df = market_cap_df.with_columns(pl.col("date").str.strptime(pl.Datetime))
+
         sorted_df = market_cap_df.sort(by="date")
+
         self.data_store.write_parquet(
             sorted_df, "processed/market_data", "marketcap.parquet"
         )

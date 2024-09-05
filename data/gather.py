@@ -23,7 +23,7 @@ def refresh_data(fields, engine, folder, no_refresh):
     market_cap_data_handler = MarketCapDataHandler(data_gatherer, data_store, start_date=dt(1990,1, 1), interval="historical-market-capitalization", sub_directory="marketcap_v2")
 
     profiles_data_handler = ProfileDataHandler(data_gatherer, data_store)
-    financial_statements_data_handler = FinancialStatementsDataHandler(data_gatherer, data_store, periods=['annual', 'quarterly'])
+    financial_statements_data_handler = FinancialStatementsDataHandler(data_gatherer, data_store, periods=['annual', 'quarter'])
 
 
     if not no_refresh:

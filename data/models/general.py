@@ -24,7 +24,7 @@ class DataStore:
         self.all_data: dict = {}
         self.symbols: List[str] = (
             get_sp500_symbols()
-        )  # Fetch symbols during initialization
+        ) # Fetch symbols during initialization
 
         # Log the initiaization
         logging.info(f"Initialized DataStore with base folder: {self.folder_path}")

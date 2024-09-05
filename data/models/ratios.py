@@ -3,7 +3,7 @@ from collections import defaultdict
 
 
 class AccountingRatioBuilder:
-    def __init__(self, data_store, periods=["annual", "quarterly"]):
+    def __init__(self, data_store, periods=["annual", "quarter"]):
         self.data_store = data_store
         self.periods = periods
         self.sub_directory = "processed/financials"

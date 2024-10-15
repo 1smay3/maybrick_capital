@@ -18,9 +18,11 @@ TTM_FIELDS = [
     "netcashprovidedbyusedinoperatingactivities",
 ]
 
+NON_TIMESERIES_FRAMES = ["all_profiles"]
+
 
 class FinancialDataProcessor:
-    def __init__(self, data_store, periods=["annual", "quarter"]):
+    def __init__(self, data_store, periods=["annual", "quarterly"]):
         self.data_store = data_store
         self.periods = periods
         self.sub_directory = "financial_statements"
@@ -116,8 +118,8 @@ class FinancialDataProcessor:
         DO_NOT_LOAD = ["all_profiles"]
         renamed_data_cache = {}
         for data_name, data in all_data.items():
-            clean_name = data_name.split("/")[-1].split(".")[0] # MAC
-            # clean_name = data_name.split("\\")[-1].split(".")[0] # Windows
+            # clean_name = data_name.split("/")[-1].split(".")[0] # MAC TODO: Centralise this... is a breaking change
+            clean_name = data_name.split("\\")[-1].split(".")[0] # Windows
             if clean_name in DO_NOT_LOAD:
                 pass
             else:
@@ -139,10 +141,14 @@ class FinancialDataProcessor:
             f"financial_statements/pre_processed/{period}"
         )
 
+        # E.G PYPL REVENUE AND SALES TO PRICE!why
+        # TODO: FIX PAYPAL - Combining like this isnt best, should we take the max?
+        # TODO: AAPLE ALSO WRONG - something going weong ehre
+
         field = field.lower()
 
         field_data_store = []
-        for stock, data in processed_financials.items():
+        for stock, data in {k:v for k,v in processed_financials.items() if "AAPL" in k}.items():
             stock_symbol = self.extract_ticker(stock, f"{period}_")
 
             quarterly_data_only = data.filter(
@@ -155,7 +161,8 @@ class FinancialDataProcessor:
                 sorted_df = field_data.sort(by="closest_filing_date")
 
                 # Apply TTM if we need/want it
-                if field in TTM_FIELDS and period == "quarter":
+                if field in TTM_FIELDS and period == "quarterly":
+                    # TODO: add more checks that sequential etc.
                     sorted_df = sorted_df.with_columns(
                         pl.col(field)
                         .rolling_sum(window_size=4, min_periods=4)
@@ -190,27 +197,28 @@ class FinancialDataProcessor:
 
                 field_data_store.append(df_daily)
 
-        merged_df = field_data_store[0]
-        for df in field_data_store[1:]:
-            merged_df = merged_df.join(df, on="date", how="outer", coalesce=True)
+        if len(field_data_store) > 0:
+            merged_df = field_data_store[0]
+            for df in field_data_store[1:]:
+                merged_df = merged_df.join(df, on="date", how="outer", coalesce=True)
 
-        # DILUTED NOS:
-        #                       A          AAL  ...        ZBRA          ZTS
-        # date                                  ...
-        # 2015-02-27  338000000.0  737100000.0  ...  51251000.0  501610000.0
-        # 2023-07-26  297000000.0  718890000.0  ...  51748069.0  464600000.0
-        # 2024-07-25  294000000.0  720712000.0  ...  51790501.0  458800000.0
-        # 2024-07-25  294000000.0  720712000.0  ...  51790501.0  458800000.0
-        # 2024-07-25  294000000.0  720712000.0  ...  51790501.0  458800000.0
-        # 2024-07-25  294000000.0  720712000.0  ...  51790501.0  458800000.0
-        # 2024-07-25  294000000.0  720712000.0  ...  51790501.0  458800000.0
+            # DILUTED NOS:
+            #                       A          AAL  ...        ZBRA          ZTS
+            # date                                  ...
+            # 2015-02-27  338000000.0  737100000.0  ...  51251000.0  501610000.0
+            # 2023-07-26  297000000.0  718890000.0  ...  51748069.0  464600000.0
+            # 2024-07-25  294000000.0  720712000.0  ...  51790501.0  458800000.0
+            # 2024-07-25  294000000.0  720712000.0  ...  51790501.0  458800000.0
+            # 2024-07-25  294000000.0  720712000.0  ...  51790501.0  458800000.0
+            # 2024-07-25  294000000.0  720712000.0  ...  51790501.0  458800000.0
+            # 2024-07-25  294000000.0  720712000.0  ...  51790501.0  458800000.0
 
-        no_duplicates_df = merged_df.unique(
-            keep="first", subset="date"
-        )  # TODO: [MAYCAP-8] This isn't causing any issues as the data checks out,
-        # but valuable to know why and how the duplicates are being introduced
+            no_duplicates_df = merged_df.unique(
+                keep="first", subset="date"
+            )  # TODO: [MAYCAP-8] This isn't causing any issues as the data checks out,
+            # but valuable to know why and how the duplicates are being introduced
 
-        return no_duplicates_df.sort(by="date")
+            return no_duplicates_df.sort(by="date")
 
     def build_single_field_frames(self, period):
         processed_data = {}
@@ -234,6 +242,7 @@ class FinancialDataProcessor:
         all_columns = []
         for df in dataframes:
             # Force date column to no timestamp
+
             df_date = df.with_columns(pl.col("date").dt.date().alias("date"))
             # Get unique dates from the current DataFrame
             all_dates.extend(df_date["date"].to_list())
@@ -256,6 +265,7 @@ class FinancialDataProcessor:
         )
         reindexed_frames = {}
         for dataframe_name, dataframe in dataframes_dict.items():
+
             pandas_df = dataframe.to_pandas().set_index("date")
             reindexed_df = pl.from_pandas(
                 pandas_df.reindex_like(base_frame).reset_index()
@@ -270,21 +280,22 @@ class FinancialDataProcessor:
         if "financials" and "market" in self.data_cache.keys():
             # Build a list of all dfs
             # Combine the values from both 'market' and 'financials' into a single list
-            combined_dataframes = list(self.data_cache["market"].values()) + list(
-                self.data_cache["financials"].values()
-            )
+            # Exclude some non-timeseries keys
+            all_keys = list(self.data_cache["market"].keys()) + list(self.data_cache["financials"].keys())
+            all_data_dict = {**self.data_cache["market"], **self.data_cache["financials"]}
+
+            timeseries_data_keys = [k for k in all_keys if
+                                    not any(substring in k for substring in NON_TIMESERIES_FRAMES)]
+
+            timseries_data_dict = {k:v for k,v in all_data_dict.items() if k in timeseries_data_keys}
+
             # Pass the combined list to the function
             unique_dates, unique_columns = self._find_common_dates_and_columns(
-                combined_dataframes
-            )
-
-            combined_dataframes_dict = {
-                **self.data_cache["market"],
-                **self.data_cache["financials"],
-            }
+                timseries_data_dict.values()
+                )
 
             financial_data_dict = self._reindex_dataframes_to_base(
-                combined_dataframes_dict, unique_dates, unique_columns
+                timseries_data_dict, unique_dates, unique_columns
             )
 
             for data_name, data in financial_data_dict.items():
@@ -297,6 +308,9 @@ class FinancialDataProcessor:
         # Combine Two Types of Revenue into one due to weird GAAP namings
         revenue_1 = self.data_store.read_parquet("core_data", "Revenue_1.parquet")
         revenue_2 = self.data_store.read_parquet("core_data", "Revenue_2.parquet")
+
+
+
 
         # Fill nulls in df1 with values from df2 for all columns
         combined_revenue = revenue_1.with_columns(

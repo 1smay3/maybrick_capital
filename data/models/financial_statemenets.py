@@ -9,7 +9,7 @@ class FinancialStatementsDataHandler:
         self.data_store = data_store
         self.periods = periods
         self.api_key = data_gatherer.api_key
-        self.base_financials_url = "https://financialmodelingprep.com/api/v3/financial-statement-full-as-reported/{symbol}?period={period}&apikey={api_key}"
+        self.base_financials_url = "https://financialmodelingprep.com/api/v3/financial-statement-full-as-reported/{symbol}?period={period}&apikey={api_key}" # Note: this is as reported, not GAAP. GAAP Is accesbile
         self.base_sec_url = "https://financialmodelingprep.com/api/v3/sec_filings/{symbol}?type={type}&page=0&apikey={api_key}"
         self.sub_directory = "financial_statements"
         self.data_cache = defaultdict(pl.DataFrame)  # To store and access data by key

@@ -9,22 +9,21 @@ import os
 from constants import ROOT_DIR
 from data.models.symbols import get_sp500_symbols
 from datetime import datetime as dt
+from pathlib import WindowsPath
 
 # Set up basic configuration for logging
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
-
+# TODO: This has become really messy from rushed incremental functionality, and needs refactoring
 class DataStore:
     def __init__(self, base_location="data/local_store", engine="polars"):
         self.base_location: Path = Path(base_location)
         self.engine: str = engine
         self.folder_path: str = os.path.join(ROOT_DIR, self.base_location)
         self.all_data: dict = {}
-        self.symbols: List[str] = (
-            get_sp500_symbols()
-        ) # Fetch symbols during initialization
+        self.symbols: List[str] = get_sp500_symbols() # Fetch symbols during initialization
 
         # Log the initiaization
         logging.info(f"Initialized DataStore with base folder: {self.folder_path}")
@@ -230,7 +229,10 @@ class DataGatherer:
                     all_data = []
                     for result in chunk_results:
                         symbol, data = result
-                        all_data.append(data)
+                        if data.shape[0]>0:
+                            all_data.append(data)
+                        else:
+                            print("Empty Frame for ", symbol)
 
                     symbol, df = symbol, pl.concat(all_data)
 

@@ -14,7 +14,6 @@ from datetime import datetime as dt
 @click.option('--folder', default='local_store', help='Folder where data files are stored.')
 def refresh_data(fields, engine, folder, no_refresh):
 
-
     # Initialize DataHandler and DataStore
     data_store = DataStore(base_location='data/local_store', engine="polars")
     data_gatherer = DataGatherer(api_key=FMP_API_KEY, symbols=data_store.symbols, rate_limit=275, data_handler=data_store, max_retries=3)
@@ -28,9 +27,9 @@ def refresh_data(fields, engine, folder, no_refresh):
 
     if not no_refresh:
         click.echo(f"Refreshing Data")
-        # prices_data_handler.update_data()
-        # profiles_data_handler.update_data()
-        # financial_statements_data_handler.update_data()
+        prices_data_handler.update_data()
+        profiles_data_handler.update_data()
+        financial_statements_data_handler.update_data()
         market_cap_data_handler.synchronously_backfill_market_caps()
 
 

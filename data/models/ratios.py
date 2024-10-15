@@ -44,6 +44,8 @@ class AccountingRatioBuilder:
         ptb = financial_data_dict["marketcap"].drop("date") / financial_data_dict[
             "ShareholdersEquity"
         ].drop("date")
+
+
         ptb = financial_data_dict["marketcap"].select("date").with_columns(ptb)
         self.data_store.write_parquet(ptb, "core_data", "ptb.parquet", log=True)
 

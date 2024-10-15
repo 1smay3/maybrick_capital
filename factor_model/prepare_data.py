@@ -10,7 +10,7 @@ data_store = DataStore(base_location='data/local_store', engine="polars")
 torikano_data_handler = TorikanoDataProcessor(data_store=data_store)
 
 
-
+# TODO: momo broken, insanely shit.
 torikano_data = torikano_data_handler.build_required_data(start_date = dt(2000, 1, 4))
 
 

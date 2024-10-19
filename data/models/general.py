@@ -9,7 +9,13 @@ import os
 from constants import ROOT_DIR
 from data.models.symbols import get_sp500_symbols
 from datetime import datetime as dt
-from pathlib import WindowsPath
+from collections import defaultdict
+from typing import Union
+import pyarrow as pa
+import pyarrow.parquet as pq
+
+
+
 
 # Set up basic configuration for logging
 logging.basicConfig(
@@ -23,9 +29,9 @@ class DataStore:
         self.engine: str = engine
         self.folder_path: str = os.path.join(ROOT_DIR, self.base_location)
         self.all_data: dict = {}
-        self.symbols: List[str] = get_sp500_symbols() # Fetch symbols during initialization
+        self.symbols: List[str] = get_sp500_symbols() # Fetch symbols during initialization # TODO: EXPOSE and CACHE This...
 
-        # Log the initiaization
+        # Log the initialization
         logging.info(f"Initialized DataStore with base folder: {self.folder_path}")
 
     def _get_full_path(self, sub_directory: str, filename: str) -> str:
@@ -59,83 +65,104 @@ class DataStore:
             return None
 
     def write_parquet(
-        self,
-        df: Union[pd.DataFrame, pl.DataFrame],
-        sub_directory: str,
-        filename: str,
+            self,
+            df: Union[pd.DataFrame, pl.DataFrame],
+            sub_directory: str,
+            filename: str,
+            metadata: dict,  # Add metadata as an optional parameter
         log: bool = True,
     ) -> None:
         filepath = self._get_full_path(sub_directory, filename)
+
         try:
-            df.write_parquet(filepath)
+            # Convert DataFrame to PyArrow Table based on the input type
+            if isinstance(df, pd.DataFrame):
+                arrow_table = pa.Table.from_pandas(df)
+            elif isinstance(df, pl.DataFrame):
+                arrow_table = df.to_arrow()
+            else:
+                raise TypeError("Data must be either a pandas or polars DataFrame.")
+
+            # Add metadata to the schema, if provided
+            if metadata:
+                schema_with_metadata = arrow_table.schema.add_metadata(metadata)
+            else:
+                schema_with_metadata = arrow_table.schema
+
+            # Write the parquet file with (or without) metadata
+            with pq.ParquetWriter(filepath, schema=schema_with_metadata) as writer:
+                writer.write_table(arrow_table)
+
             if log:
                 logging.info(f"Successfully wrote data to {filepath}")
         except Exception as e:
             logging.error(f"Failed to write {filename}: {e}")
 
     def read(
-        self,
-        sub_directory: str,
-        filename: str,
-        engine: Optional[str] = None,
-        parquet_suffix: Optional[str] = True,
-    ) -> Union[pl.DataFrame, pd.DataFrame]:
+            self,
+            sub_directory: str,
+            filename: str,
+            engine: Optional[str] = None,
+            return_metadata: bool = False  # Option to return metadata
+    ) -> Union[pl.DataFrame, pd.DataFrame, tuple[pl.DataFrame, dict], tuple[pd.DataFrame, dict]]:
         # Use the provided engine or fallback to the default one
         engine = engine or self.engine
 
-        clean_filename = f"{filename}.parquet" if parquet_suffix else filename
-
         # Construct the file path
-        filepath = self._get_full_path(sub_directory, f"{clean_filename}")
+        filepath = self._get_full_path(sub_directory, filename)
 
+        # Handle Polars DataFrame
         if engine == "polars":
             if os.path.isdir(filepath):
                 print(filepath, "is a directory!")
             else:
-                return pl.read_parquet(filepath)
+                df = pl.read_parquet(filepath)
+                if return_metadata:
+                    # Read the metadata using pyarrow
+                    parquet_file = pq.ParquetFile(filepath)
+                    metadata = parquet_file.metadata.metadata  # Extract metadata
+                    metadata_dict = {k.decode(): v.decode() for k, v in metadata.items()}
+                    return df, metadata_dict  # Return the DataFrame and metadata
+                return df
 
+        # Handle Pandas DataFrame
         elif engine == "pandas":
-            return pd.read_parquet(filepath, engine="pyarrow")
+            df = pd.read_parquet(filepath, engine="pyarrow")
+            if return_metadata:
+                # Read the metadata using pyarrow
+                parquet_file = pq.ParquetFile(filepath)
+                metadata = parquet_file.metadata.metadata  # Extract metadata
+                metadata_dict = {k.decode(): v.decode() for k, v in metadata.items()}
+                return df, metadata_dict  # Return the DataFrame and metadata
+            return df
+
         else:
             raise ValueError("Unsupported engine. Use 'polars' or 'pandas'.")
 
-    def real_all_in_directory(
-        self, sub_directory: str, parquet_suffix: Union[bool, str] = True
-    ) -> Dict[str, Union[pl.DataFrame, pd.DataFrame]]:
+    def read_all_in_directory(
+            self, sub_directory: str, return_metadata: bool
+    ) -> Dict[str, Dict[str, Union[pl.DataFrame, pd.DataFrame]]]:
+        """Load and cache all data files from a specific subdirectory, returning metadata and data."""
         self.all_data = {}
-        """Load and cache all data files from a specific subdirectory."""
         # Create a Path object for the subdirectory
         subdir_path = Path(self.folder_path) / sub_directory
 
-        # Get a set of existing file stems in the subdirectory
-        if parquet_suffix:
-            existing_files = set(
-                filepath.stem for filepath in subdir_path.glob("*.parquet")
-            )
-        else:
-            existing_files = set(filepath for filepath in subdir_path.glob("*"))
+        existing_files = set(filepath for filepath in subdir_path.glob("*"))
 
-        # Check for missing symbols - TODO: This doesnt work, as we arent always expecting to load symbols
-        missing_symbols = set(self.symbols).difference(existing_files)
-        extra_files = existing_files.difference(set(self.symbols))
-
-        if missing_symbols:
-            print(f"Missing files for {sub_directory}, symbols: {missing_symbols}")
-        if extra_files:
-            print(f"Extra files found: {extra_files}")
-
-        # Iterate through each parquet file in the subdirectory
+        # Iterate through each file in the subdirectory
         for filepath in existing_files:
-            # Construct the full path
             # Read parquet file and cache it
-            data = self.read(sub_directory, filepath, parquet_suffix=parquet_suffix)
+            data, metadata = self.read(sub_directory, engine=self.engine, filename=filepath, return_metadata=return_metadata)
             if data is not None:
-                self.all_data[f"{sub_directory}_{filepath}"] = data
+                self.all_data[f"{sub_directory}_{filepath.name}"] = {
+                    "metadata": metadata,
+                    "data": data
+                }
 
         return self.all_data
 
     def read_core_data(self) -> Dict[str, Union[pl.DataFrame, pd.DataFrame]]:
-        core_data_dict = self.real_all_in_directory("core_data", parquet_suffix=True)
+        core_data_dict = self.read_all_in_directory("core_data")
         clean_core_data_dict = {}
         for k, v in core_data_dict.items():
             clean_core_data_dict[k.replace("core_data_", "")] = v
@@ -241,8 +268,9 @@ class DataGatherer:
                         logging.error(f"No data for symbol: {symbol}. Skipping saving.")
                         continue
 
+                    print(symbol)
                     self.data_handler.write_parquet(
-                        df, file_suffix, f"{symbol}.parquet"
+                        df, sub_directory=file_suffix, filename=f"{symbol}.parquet", metadata={"symbol":symbol, "recieved_dt":dt.now().strftime("%Y-%m-%d %H:%M:%S")}
                     )
                     logging.info(f"Saved data for symbol: {symbol}")
 
@@ -267,7 +295,7 @@ class DataGatherer:
                         continue
 
                     self.data_handler.write_parquet(
-                        df, file_suffix, f"{symbol}.parquet"
+                        df, sub_directory=file_suffix, filename=f"{symbol}.parquet", metadata={"symbol":symbol, "recieved_dt":dt.now().strftime("%Y-%m-%d %H:%M:%S")}
                     )
                     logging.info(f"Saved data for symbol: {symbol}")
 
@@ -290,3 +318,62 @@ class DataGatherer:
                     build_url, process_response, file_suffix, date_chunker
                 )
             )
+
+class GenericDataHandler:
+    def __init__(self, data_gatherer, data_store, sub_directory):
+        self.data_gatherer = data_gatherer
+        self.data_store = data_store
+        self.sub_directory = sub_directory
+        self.data_cache = defaultdict(pl.DataFrame)
+
+    def read_raw_data(self, sub_directory):
+        """Load raw data from the data store and cache it."""
+        all_data = self.data_store.read_all_in_directory(sub_directory, return_metadata=True)
+        # Cache data using sub_directory as key
+        self.data_cache[sub_directory] = all_data
+        return all_data
+
+    async def gather_and_store_data(self, build_url, process_data):
+        """Fetch data for all symbols and store it."""
+        await self.data_gatherer._fetch_all_data(
+            build_url, process_data, self.sub_directory
+        )
+
+    def update_data(self, build_url, process_data):
+        """Run the async gathering and storing process."""
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                raise RuntimeError(
+                    "Cannot run 'update_data' while another event loop is running"
+                )
+            else:
+                loop.run_until_complete(self.gather_and_store_data(build_url, process_data))
+        except RuntimeError as e:
+            print(f"RuntimeError: {e}")
+            raise e
+
+    def _get_list_of_field_frames(self, key, field):
+        """Fetch and process data for a specific field using cached data."""
+        if key not in self.data_cache:
+            raise ValueError(f"No data available for key: {key}")
+
+        all_frames = self.data_cache[key]
+        dfs = []
+        for frame_name, frame_data in all_frames.items():
+            symbol = frame_data["metadata"]["symbol"]
+            underlying_data = frame_data["data"]
+            data = underlying_data[["date", field]].rename({field: symbol})
+            dfs.append(data)
+        return dfs
+
+    def get_field(self, key, field):
+        """Get a merged DataFrame of a specific field across all symbols."""
+        list_of_frames = self._get_list_of_field_frames(key, field)
+        if not list_of_frames:
+            return pl.DataFrame()
+        merged_df = list_of_frames[0]
+        for df in list_of_frames[1:]:
+            merged_df = merged_df.join(df, how="full", on="date", coalesce=True)
+        no_duplicates_df = merged_df.unique(keep="first", subset="date")
+        return no_duplicates_df.sort("date")

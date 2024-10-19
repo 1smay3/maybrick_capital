@@ -3,7 +3,7 @@ import polars as pl
 from collections import defaultdict
 
 
-class FinancialStatementsDataHandler:
+class FinancialStatementsDataHandler():
     def __init__(self, data_gatherer, data_store, periods):
         self.data_gatherer = data_gatherer
         self.data_store = data_store
